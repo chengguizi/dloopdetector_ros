@@ -8,7 +8,16 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON) # prevent fallback
 
 ### configuration for catkin packages
 
-find_package(catkin REQUIRED COMPONENTS dbow2)
+find_package(catkin REQUIRED COMPONENTS 
+  roscpp 
+  sensor_msgs 
+  message_filters 
+  image_transport 
+  cv_bridge 
+
+  dbow2
+  libviso2
+)
 
 # set(DEPENDENCY_DIR ${CMAKE_BINARY_DIR}/dependencies)
 # set(DEPENDENCY_INSTALL_DIR ${DEPENDENCY_DIR}/install)
@@ -20,7 +29,7 @@ catkin_package(
 	# INCLUDE_DIRS
 	# LIBRARIES rs2_ros
 	# CATKIN_DEPENDS dbow2
-	DEPENDS DBoW2 DLib OpenCV# this is just for checking purposes
+	DEPENDS DBoW2 DLib OpenCV libviso2# this is just for checking purposes
     )
     
 
@@ -38,6 +47,17 @@ option(BUILD_DemoBRIEF  "Build demo application with BRIEF features" ON)
 
 if(BUILD_DemoBRIEF)
   add_executable(demo_brief demo/demo_brief.cpp)
-  target_include_directories(demo_brief PRIVATE include/DLoopDetector ${DBoW2_INCLUDE_DIRS} ${DLib_INCLUDE_DIRS})
-  target_link_libraries(demo_brief PRIVATE ${OpenCV_LIBS} ${DBoW2_LIBS} ${DLib_LIBS} )
+  target_include_directories(demo_brief PRIVATE 
+    include/DLoopDetector 
+    ${DBoW2_INCLUDE_DIRS} 
+    ${DLib_INCLUDE_DIRS}
+    ${catkin_INCLUDE_DIRS}
+  )
+
+  target_link_libraries(demo_brief PRIVATE 
+    ${OpenCV_LIBS} 
+    ${DBoW2_LIBS} 
+    ${DLib_LIBS} 
+    ${catkin_LIBRARIES}
+  )
 endif(BUILD_DemoBRIEF)

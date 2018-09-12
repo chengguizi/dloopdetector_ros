@@ -21,6 +21,9 @@
 
 #include "demoDetector.h"
 
+// ROS Integration
+#include <ros/ros.h>
+
 using namespace DLoopDetector;
 using namespace DBoW2;
 using namespace DVision;
@@ -28,12 +31,12 @@ using namespace std;
 
 // ----------------------------------------------------------------------------
 
-static const char *VOC_FILE = "./resources/brief_k10L6.voc.gz";
-static const char *IMAGE_DIR = "./resources/images";
-static const char *POSE_FILE = "./resources/pose.txt";
+static const char *VOC_FILE = "/home/dhl/git/catkin_ws/resources/brief_k10L6.voc.gz";
+static const char *IMAGE_DIR = "/home/dhl/git/catkin_ws/resources/images";
+static const char *POSE_FILE = "./home/dhl/git/catkin_ws/resources/pose.txt";
 static const int IMAGE_W = 640; // image size
 static const int IMAGE_H = 480;
-static const char *BRIEF_PATTERN_FILE = "./resources/brief_pattern.yml";
+static const char *BRIEF_PATTERN_FILE = "/home/dhl/git/catkin_ws/resources/brief_pattern.yml";
 
 // - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - 
 
@@ -64,8 +67,12 @@ private:
 
 // - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - 
 
-int main()
+int main(int argc, char **argv)
 {
+  ros::init(argc, argv, "brief_detector");
+
+	ros::NodeHandle local_nh("~");
+
   // prepares the demo
   demoDetector<BriefVocabulary, BriefLoopDetector, FBrief::TDescriptor> 
     demo(VOC_FILE, IMAGE_DIR, POSE_FILE, IMAGE_W, IMAGE_H);

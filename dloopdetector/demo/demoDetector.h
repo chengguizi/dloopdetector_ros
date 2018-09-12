@@ -24,6 +24,21 @@
 #include <DUtilsCV/DUtilsCV.h>
 #include <DVision/DVision.h>
 
+// ROS Integration
+#include <ros/ros.h>
+#include <sensor_msgs/Image.h>
+#include <sensor_msgs/CameraInfo.h>
+
+#include <message_filters/subscriber.h>
+#include <message_filters/synchronizer.h>
+#include <message_filters/sync_policies/exact_time.h>
+#include <image_transport/subscriber_filter.h>
+
+#include <cv_bridge/cv_bridge.h>
+
+// libviso Integration
+#include "viso_stereo.h"
+
 using namespace DLoopDetector;
 using namespace DBoW2;
 using namespace std;
@@ -94,6 +109,30 @@ protected:
   std::string m_posefile;
   int m_width;
   int m_height;
+  FeatureExtractor<TDescriptor> *extractor_;
+  
+
+  // ROS
+
+  image_transport::SubscriberFilter left_sub_;
+	message_filters::Subscriber<sensor_msgs::CameraInfo> left_info_sub_;
+	typedef message_filters::sync_policies::ExactTime<sensor_msgs::Image, sensor_msgs::CameraInfo> ExactPolicy;
+	typedef message_filters::Synchronizer<ExactPolicy> ExactSync;
+	ExactSync exact_sync_;
+
+  int all_received_;
+  sensor_msgs::ImageConstPtr l_image_msg_;
+  sensor_msgs::CameraInfoConstPtr l_info_msg_;
+
+  void dataCb(const sensor_msgs::ImageConstPtr& l_image_msg,
+							const sensor_msgs::CameraInfoConstPtr& l_info_msg
+						)
+  {
+    all_received_++;
+    l_image_msg_ = l_image_msg;
+    l_info_msg_ = l_info_msg;
+    // cout << "Received No." << all_received_ << "ros image" << endl;
+  }
 };
 
 // ---------------------------------------------------------------------------
@@ -103,7 +142,7 @@ demoDetector<TVocabulary, TDetector, TDescriptor>::demoDetector
   (const std::string &vocfile, const std::string &imagedir,
   const std::string &posefile, int width, int height)
   : m_vocfile(vocfile), m_imagedir(imagedir), m_posefile(posefile),
-    m_width(width), m_height(height)
+    m_width(width), m_height(height), exact_sync_(ExactPolicy(3), left_sub_, left_info_sub_), all_received_(0)
 {
 }
 
@@ -113,7 +152,7 @@ template<class TVocabulary, class TDetector, class TDescriptor>
 void demoDetector<TVocabulary, TDetector, TDescriptor>::run
   (const std::string &name, const FeatureExtractor<TDescriptor> &extractor)
 {
-  cout << "DLoopDetector Demo" << endl 
+  cout << "DLoopDetector Demo - Modified by Cheng Huimin" << endl 
     << "Dorian Galvez-Lopez" << endl
     << "http://doriangalvez.com" << endl << endl;
   
@@ -171,41 +210,92 @@ void demoDetector<TVocabulary, TDetector, TDescriptor>::run
   vector<TDescriptor> descriptors;
 
   // load image filenames  
-  vector<string> filenames = 
-    DUtils::FileFunctions::Dir(m_imagedir.c_str(), ".png", true);
+  // vector<string> filenames = 
+  //   DUtils::FileFunctions::Dir(m_imagedir.c_str(), ".png", true);
   
   // load robot poses
-  vector<double> xs, ys;
-  readPoseFile(m_posefile.c_str(), xs, ys);
+  // vector<double> xs, ys;
+  // readPoseFile(m_posefile.c_str(), xs, ys);
   
   // we can allocate memory for the expected number of images
-  detector.allocate(filenames.size());
-  
+  cout << "Allocating memory for detector" << endl;
+  // detector.allocate(filenames.size());
+  detector.allocate(1000);
+
   // prepare visualization windows
   DUtilsCV::GUI::tWinHandler win = "Current image";
-  DUtilsCV::GUI::tWinHandler winplot = "Trajectory";
+  // DUtilsCV::GUI::tWinHandler winplot = "Trajectory";
   
-  DUtilsCV::Drawing::Plot::Style normal_style(2); // thickness
-  DUtilsCV::Drawing::Plot::Style loop_style('r', 2); // color, thickness
+  // DUtilsCV::Drawing::Plot::Style normal_style(2); // thickness
+  // DUtilsCV::Drawing::Plot::Style loop_style('r', 2); // color, thickness
   
-  DUtilsCV::Drawing::Plot implot(240, 320,
-    - *std::max_element(xs.begin(), xs.end()),
-    - *std::min_element(xs.begin(), xs.end()),
-    *std::min_element(ys.begin(), ys.end()),
-    *std::max_element(ys.begin(), ys.end()), 20);
+  // DUtilsCV::Drawing::Plot implot(240, 320,
+  //   - *std::max_element(xs.begin(), xs.end()),
+  //   - *std::min_element(xs.begin(), xs.end()),
+  //   *std::min_element(ys.begin(), ys.end()),
+  //   *std::max_element(ys.begin(), ys.end()), 20);
   
   // prepare profiler to measure times
   DUtils::Profiler profiler;
+
+
+  // ROS INITIALISATION
+
+  // Read local parameters
+  ros::NodeHandle local_nh("~");
+  // Resolve topic names
+  ros::NodeHandle nh;
+
+  std::string left_topic;
+  std::string left_info_topic;
+  local_nh.param<std::string>("left_image",left_topic, "/stereo/left/image_rect_raw" );
+  local_nh.param<std::string>("left_camerainfo",left_info_topic, "/stereo/left/camera_info" );
+
+  // Subscribe to four input topics.
+  ROS_INFO("viso2_ros: Subscribing to:\n\t* %s\n\t*  %s", 
+      left_topic.c_str(), left_info_topic.c_str());
+
+  image_transport::ImageTransport it(nh);
+  image_transport::TransportHints hints("raw",ros::TransportHints().tcpNoDelay());
+  left_sub_.subscribe(it, left_topic, 1, hints); // http://docs.ros.org/diamondback/api/image_transport/html/classimage__transport_1_1TransportHints.html
+  left_info_sub_.subscribe(nh, left_info_topic, 1,  ros::TransportHints().tcpNoDelay());
+
+  exact_sync_.registerCallback(boost::bind(&demoDetector::dataCb, this, _1, _2));
   
   int count = 0;
   
   // go
-  for(unsigned int i = 0; i < filenames.size(); ++i)
+  for(unsigned int i = 0; i < 1000; i+=10)
   {
-    cout << "Adding image " << i << ": " << filenames[i] << "... " << endl;
+    
     
     // get image
-    cv::Mat im = cv::imread(filenames[i].c_str(), 0); // grey scale
+
+    
+    while (ros::ok() && all_received_ <= i)
+    {
+      ros::spinOnce();
+      ros::Duration(0.01).sleep();
+    }
+
+    if(!ros::ok())
+    {
+      cout << "ROS Shutting down" << endl;
+      return;
+    }
+
+    i = all_received_;
+    cout << "Adding image " << i << endl;
+
+    uint8_t *l_image_data;
+		int l_step;
+		cv_bridge::CvImageConstPtr l_cv_ptr;
+		l_cv_ptr = cv_bridge::toCvShare(l_image_msg_, sensor_msgs::image_encodings::MONO8);
+		l_image_data = l_cv_ptr->image.data;
+		l_step = l_cv_ptr->image.step[0];
+
+		int dims[] = {(int)l_image_msg_->width, (int)l_image_msg_->height, l_step};
+		cv::Mat im(cv::Size(dims[0], dims[1]), CV_8UC1, (void *)l_image_data, cv::Mat::AUTO_STEP);
     
     // show image
     DUtilsCV::GUI::showImage(im, true, &win, 10);
@@ -271,19 +361,19 @@ void demoDetector<TVocabulary, TDetector, TDescriptor>::run
           break;
       }
     }
-    
+    cout << " Loop detection (mean): " << profiler.getMeanTime("detection") * 1e3 << " ms/image" ;
     cout << endl;
     
-    // show trajectory
-    if(i > 0)
-    {
-      if(result.detection())
-        implot.line(-xs[i-1], ys[i-1], -xs[i], ys[i], loop_style);
-      else
-        implot.line(-xs[i-1], ys[i-1], -xs[i], ys[i], normal_style);
+    // // show trajectory
+    // if(i > 0)
+    // {
+    //   if(result.detection())
+    //     implot.line(-xs[i-1], ys[i-1], -xs[i], ys[i], loop_style);
+    //   else
+    //     implot.line(-xs[i-1], ys[i-1], -xs[i], ys[i], normal_style);
       
-      DUtilsCV::GUI::showImage(implot.getImage(), true, &winplot, 10); 
-    }
+    //   DUtilsCV::GUI::showImage(implot.getImage(), true, &winplot, 10); 
+    // }
   }
   
   if(count == 0)
@@ -296,13 +386,15 @@ void demoDetector<TVocabulary, TDetector, TDescriptor>::run
   } 
 
   cout << endl << "Execution time:" << endl
-    << " - Feature computation: " << profiler.getMeanTime("features") * 1e3
+    << " - Feature computation : (mean) " << profiler.getMeanTime("features") * 1e3
+    << " ms/image, (max)" << profiler.getMaxTime("features") * 1e3
     << " ms/image" << endl
-    << " - Loop detection: " << profiler.getMeanTime("detection") * 1e3
+    << " - Loop detection (mean): " << profiler.getMeanTime("detection") * 1e3
+    << " ms/image, (max)" << profiler.getMaxTime("detection") * 1e3
     << " ms/image" << endl;
 
   cout << endl << "Press a key to finish..." << endl;
-  DUtilsCV::GUI::showImage(implot.getImage(), true, &winplot, 0);
+  // DUtilsCV::GUI::showImage(implot.getImage(), true, &winplot, 0);
 }
 
 // ---------------------------------------------------------------------------
