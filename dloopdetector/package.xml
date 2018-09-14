@@ -40,7 +40,6 @@
   <build_depend>image_transport</build_depend>
   <build_depend>cv_bridge</build_depend>
   <build_depend>dbow2</build_depend>
-  <build_depend>libviso2</build_depend>
   <exec_depend>roscpp</exec_depend>
   <exec_depend>std_msgs</exec_depend>
   <exec_depend>sensor_msgs</exec_depend>
@@ -48,6 +47,5 @@
   <exec_depend>image_transport</exec_depend>
   <exec_depend>cv_bridge</exec_depend>
   <exec_depend>dbow2</exec_depend>
-  <exec_depend>libviso2</exec_depend>
 
 </package>

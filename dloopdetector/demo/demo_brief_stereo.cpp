@@ -19,7 +19,7 @@
 #include <opencv2/core.hpp>
 #include <opencv2/highgui.hpp>
 
-#include "demoDetector.h"
+#include "demoDetectorStereo.h"
 
 // ROS Integration
 #include <ros/ros.h>
@@ -32,11 +32,11 @@ using namespace std;
 // ----------------------------------------------------------------------------
 
 static const char *VOC_FILE = "/home/dhl/git/catkin_ws/resources/brief_k10L6.voc.gz";
-static const char *IMAGE_DIR = "/home/dhl/git/catkin_ws/resources/images";
-static const char *POSE_FILE = "./home/dhl/git/catkin_ws/resources/pose.txt";
-static const int IMAGE_W = 640; // image size
-static const int IMAGE_H = 480;
-static const char *BRIEF_PATTERN_FILE = "/home/dhl/git/catkin_ws/resources/brief_pattern.yml";
+static const char *POSE_FILE="";
+static const char *IMAGE_DIR="";
+// static const int IMAGE_W = 640; // image size
+// static const int IMAGE_H = 480;
+// static const char *BRIEF_PATTERN_FILE = "/home/dhl/git/catkin_ws/resources/brief_pattern.yml";
 
 // - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - 
 
@@ -69,9 +69,16 @@ private:
 
 int main(int argc, char **argv)
 {
-  ros::init(argc, argv, "brief_detector");
+  ros::init(argc, argv, "demo_brief");
 
 	ros::NodeHandle local_nh("~");
+
+  string VOC_FILE, BRIEF_PATTERN_FILE;
+  int IMAGE_W, IMAGE_H;
+  local_nh.param("IMAGE_W",IMAGE_W, 1280 );
+  local_nh.param("IMAGE_H",IMAGE_H, 720 );
+  local_nh.param<std::string>("VOC_FILE",VOC_FILE, "./VOC_FILE" );
+  local_nh.param<std::string>("BRIEF_PATTERN_FILE",BRIEF_PATTERN_FILE, "./BRIEF_PATTERN_FILE" );
 
   // prepares the demo
   demoDetector<BriefVocabulary, BriefLoopDetector, FBrief::TDescriptor> 

@@ -22,9 +22,9 @@
 #include "QueryResults.h"
 #include "BowVector.h"
 
-#include "DUtils.h"
-#include "DUtilsCV.h"
-#include "DVision.h"
+#include "DUtils/DUtils.h"
+#include "DUtilsCV/DUtilsCV.h"
+#include "DVision/DVision.h"
 
 using namespace std;
 using namespace DUtils;
@@ -67,26 +67,6 @@ enum DetectionStatus
   NO_GEOMETRICAL_CONSISTENCY
 };
 
-/// Result of a detection
-struct DetectionResult
-{
-  /// Detection status. LOOP_DETECTED iff loop detected
-  DetectionStatus status;
-  /// Query id
-  EntryId query;
-  /// Matched id if loop detected, otherwise, best candidate 
-  EntryId match;
-  
-  /**
-   * Checks if the loop was detected
-   * @return true iff a loop was detected
-   */
-  inline bool detection() const
-  {
-    return status == LOOP_DETECTED;
-  }
-};
-
 /// TDescriptor: class of descriptor
 /// F: class of descriptor functions
 template<class TDescriptor, class F>
@@ -94,6 +74,34 @@ template<class TDescriptor, class F>
 class TemplatedLoopDetector
 {
 public:
+
+  /// Result of a detection
+  struct DetectionResult
+  {
+    /// Detection status. LOOP_DETECTED iff loop detected
+    DetectionStatus status;
+    /// Query id
+    EntryId query;
+    /// Matched id if loop detected, otherwise, best candidate 
+    EntryId match;
+
+    /// KeyPoints of images
+    vector<cv::KeyPoint>  query_key;
+    vector<cv::KeyPoint>  match_key;
+    
+    /// Descriptors of images
+    vector<TDescriptor> query_descriptors;
+    vector<TDescriptor> match_descriptors;
+
+    /**
+     * Checks if the loop was detected
+     * @return true iff a loop was detected
+     */
+    inline bool detection() const
+    {
+      return status == LOOP_DETECTED;
+    }
+  };
   
   /// Parameters to create a loop detector
   struct Parameters
@@ -803,6 +811,13 @@ bool TemplatedLoopDetector<TDescriptor, F>::detectLoop(
               if(detection)
               {
                 match.status = LOOP_DETECTED;
+
+                // update keys and descriptors in the result
+                match.query_key = keys;
+                match.match_key = m_image_keys[match.match];
+
+                match.query_descriptors = descriptors;
+                match.match_descriptors = m_image_descriptors[match.match];
               }
               else
               {

@@ -37,7 +37,6 @@
 #include <cv_bridge/cv_bridge.h>
 
 // libviso Integration
-#include "viso_stereo.h"
 
 using namespace DLoopDetector;
 using namespace DBoW2;
@@ -115,22 +114,30 @@ protected:
   // ROS
 
   image_transport::SubscriberFilter left_sub_;
+  image_transport::SubscriberFilter right_sub_;
 	message_filters::Subscriber<sensor_msgs::CameraInfo> left_info_sub_;
-	typedef message_filters::sync_policies::ExactTime<sensor_msgs::Image, sensor_msgs::CameraInfo> ExactPolicy;
+  message_filters::Subscriber<sensor_msgs::CameraInfo> right_info_sub_;
+	typedef message_filters::sync_policies::ExactTime<sensor_msgs::Image, sensor_msgs::Image, sensor_msgs::CameraInfo, sensor_msgs::CameraInfo> ExactPolicy;
 	typedef message_filters::Synchronizer<ExactPolicy> ExactSync;
 	ExactSync exact_sync_;
 
   int all_received_;
   sensor_msgs::ImageConstPtr l_image_msg_;
+  sensor_msgs::ImageConstPtr r_image_msg_;
   sensor_msgs::CameraInfoConstPtr l_info_msg_;
+  sensor_msgs::CameraInfoConstPtr r_info_msg_;
 
   void dataCb(const sensor_msgs::ImageConstPtr& l_image_msg,
-							const sensor_msgs::CameraInfoConstPtr& l_info_msg
+							const sensor_msgs::ImageConstPtr& r_image_msg,
+							const sensor_msgs::CameraInfoConstPtr& l_info_msg,
+							const sensor_msgs::CameraInfoConstPtr& r_info_msg
 						)
   {
     all_received_++;
     l_image_msg_ = l_image_msg;
+    r_image_msg_ = r_image_msg;
     l_info_msg_ = l_info_msg;
+    r_info_msg_ = r_info_msg;
     // cout << "Received No." << all_received_ << "ros image" << endl;
   }
 };
@@ -142,7 +149,7 @@ demoDetector<TVocabulary, TDetector, TDescriptor>::demoDetector
   (const std::string &vocfile, const std::string &imagedir,
   const std::string &posefile, int width, int height)
   : m_vocfile(vocfile), m_imagedir(imagedir), m_posefile(posefile),
-    m_width(width), m_height(height), exact_sync_(ExactPolicy(3), left_sub_, left_info_sub_), all_received_(0)
+    m_width(width), m_height(height), exact_sync_(ExactPolicy(3), left_sub_, right_sub_, left_info_sub_, right_info_sub_), all_received_(0)
 {
 }
 
@@ -203,7 +210,7 @@ void demoDetector<TVocabulary, TDetector, TDescriptor>::run
   
   // Initiate loop detector with the vocabulary 
   cout << "Processing sequence..." << endl;
-  TDetector detector(voc, params);
+  TDetector detector(voc, params); // typedef TemplatedLoopDetector
   
   // Process images
   vector<cv::KeyPoint> keys;
@@ -246,33 +253,39 @@ void demoDetector<TVocabulary, TDetector, TDescriptor>::run
   // Resolve topic names
   ros::NodeHandle nh;
 
-  std::string left_topic;
-  std::string left_info_topic;
+  std::string left_topic, right_topic;
+  std::string left_info_topic, right_info_topic;
   local_nh.param<std::string>("left_image",left_topic, "/stereo/left/image_rect_raw" );
+  local_nh.param<std::string>("right_image",right_topic, "/stereo/right/image_rect_raw" );
   local_nh.param<std::string>("left_camerainfo",left_info_topic, "/stereo/left/camera_info" );
+  local_nh.param<std::string>("right_camerainfo",right_info_topic, "/stereo/right/camera_info" );
 
   // Subscribe to four input topics.
-  ROS_INFO("viso2_ros: Subscribing to:\n\t* %s\n\t*  %s", 
-      left_topic.c_str(), left_info_topic.c_str());
+  ROS_INFO("viso2_ros: Subscribing to:\n\t* %s\n\t* %s\n\t* %s\n\t* %s", 
+				left_topic.c_str(), right_topic.c_str(),
+				left_info_topic.c_str(), right_info_topic.c_str());
 
   image_transport::ImageTransport it(nh);
   image_transport::TransportHints hints("raw",ros::TransportHints().tcpNoDelay());
   left_sub_.subscribe(it, left_topic, 1, hints); // http://docs.ros.org/diamondback/api/image_transport/html/classimage__transport_1_1TransportHints.html
+  right_sub_.subscribe(it, right_topic, 1, hints);
   left_info_sub_.subscribe(nh, left_info_topic, 1,  ros::TransportHints().tcpNoDelay());
+  right_info_sub_.subscribe(nh, right_info_topic, 1,  ros::TransportHints().tcpNoDelay());
 
-  exact_sync_.registerCallback(boost::bind(&demoDetector::dataCb, this, _1, _2));
+  exact_sync_.registerCallback(boost::bind(&demoDetector::dataCb, this, _1, _2, _3, _4));
   
   int count = 0;
-  
+  int db_size = 0;
+
   // go
-  for(unsigned int i = 0; i < 1000; i+=10)
+  while(true)
   {
     
     
     // get image
 
     
-    while (ros::ok() && all_received_ <= i)
+    while (ros::ok() && all_received_/10 <= db_size)
     {
       ros::spinOnce();
       ros::Duration(0.01).sleep();
@@ -281,35 +294,37 @@ void demoDetector<TVocabulary, TDetector, TDescriptor>::run
     if(!ros::ok())
     {
       cout << "ROS Shutting down" << endl;
-      return;
+      break;
     }
 
-    i = all_received_;
-    cout << "Adding image " << i << endl;
+    
+    cout << "Adding image " << db_size << endl;
 
     uint8_t *l_image_data;
-		int l_step;
 		cv_bridge::CvImageConstPtr l_cv_ptr;
 		l_cv_ptr = cv_bridge::toCvShare(l_image_msg_, sensor_msgs::image_encodings::MONO8);
 		l_image_data = l_cv_ptr->image.data;
-		l_step = l_cv_ptr->image.step[0];
 
-		int dims[] = {(int)l_image_msg_->width, (int)l_image_msg_->height, l_step};
-		cv::Mat im(cv::Size(dims[0], dims[1]), CV_8UC1, (void *)l_image_data, cv::Mat::AUTO_STEP);
-    
-    // show image
-    DUtilsCV::GUI::showImage(im, true, &win, 10);
+    ROS_ASSERT( m_width == (int)l_image_msg_->width && m_height == (int)l_image_msg_->height);
+		cv::Mat im(cv::Size(m_width, m_height), CV_8UC1, (void *)l_image_data, cv::Mat::AUTO_STEP);
+
     
     // get features
     profiler.profile("features");
     extractor(im, keys, descriptors);
     profiler.stop();
+
+    // show image
+    cv::Mat outIm(cv::Size(m_width,m_height),CV_8UC1);
+    cv::drawKeypoints(im,keys,outIm);
+    DUtilsCV::GUI::showImage(outIm, true, &win, 10);
         
     // add image to the collection and check if there is some loop
-    DetectionResult result;
+    typename TDetector::DetectionResult result;
     
     profiler.profile("detection");
-    detector.detectLoop(keys, descriptors, result);
+    detector.detectLoop(keys, descriptors, result); // db_size + 1 for each of the detectLoop operation
+    db_size++;
     profiler.stop();
     
     if(result.detection())
