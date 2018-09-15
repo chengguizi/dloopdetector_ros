@@ -39,7 +39,7 @@ option(BUILD_DemoBRIEF  "Build demo application with BRIEF features" ON)
 if(BUILD_DemoBRIEF)
   add_executable(demo_brief_stereo demo/demo_brief_stereo.cpp)
   target_include_directories(demo_brief_stereo PRIVATE 
-    include/DLoopDetector 
+    include 
     ${DBoW2_INCLUDE_DIRS} 
     ${DLib_INCLUDE_DIRS}
     ${catkin_INCLUDE_DIRS}

@@ -20,7 +20,7 @@ ExternalProject_Add(dbow2_external_git
 # This should come before any other packages
 find_package(catkin REQUIRED)
 catkin_package(
-	# INCLUDE_DIRS ${CATKIN_DEVEL_PREFIX}/include
+	INCLUDE_DIRS ${CATKIN_DEVEL_PREFIX}/include
 	# LIBRARIES DBoW2 DLib# this is needed to include library names into ${PROJECT_NAME}Config.cmake
 	# CATKIN_DEPENDS roscpp std_msgs
 	# DEPENDS system_lib

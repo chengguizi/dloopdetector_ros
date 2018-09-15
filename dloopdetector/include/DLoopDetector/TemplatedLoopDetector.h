@@ -14,13 +14,14 @@
 #include <numeric>
 #include <fstream>
 #include <string>
+#include <cassert>
 
 #include <opencv/cv.h>
 
-#include "TemplatedVocabulary.h"
-#include "TemplatedDatabase.h"
-#include "QueryResults.h"
-#include "BowVector.h"
+#include "DBoW2/TemplatedVocabulary.h"
+#include "DBoW2/TemplatedDatabase.h"
+#include "DBoW2/QueryResults.h"
+#include "DBoW2/BowVector.h"
 
 #include "DUtils/DUtils.h"
 #include "DUtilsCV/DUtilsCV.h"
@@ -75,6 +76,25 @@ class TemplatedLoopDetector
 {
 public:
 
+  template <typename Tstereo> // cv::KeyPoint or TDescriptor
+  struct StereoVector{
+    vector< Tstereo > main;
+    vector< Tstereo > right;
+
+    std::size_t size(){
+      auto size = main.size();
+      assert(size == right.size());
+      return size;
+    }
+
+    void reserve(std::size_t n){
+      main.reserve(n);
+      right.reserve(n);
+    }
+
+
+  };
+
   /// Result of a detection
   struct DetectionResult
   {
@@ -86,12 +106,12 @@ public:
     EntryId match;
 
     /// KeyPoints of images
-    vector<cv::KeyPoint>  query_key;
-    vector<cv::KeyPoint>  match_key;
+    StereoVector<cv::KeyPoint>  query_keys;
+    StereoVector<cv::KeyPoint>  match_keys;
     
     /// Descriptors of images
-    vector<TDescriptor> query_descriptors;
-    vector<TDescriptor> match_descriptors;
+    StereoVector<TDescriptor> query_descriptors;
+    StereoVector<TDescriptor> match_descriptors;
 
     /**
      * Checks if the loop was detected
@@ -268,9 +288,8 @@ public:
    * @param match (out) match or failing information
    * @return true iff there was match
    */
-  bool detectLoop(const std::vector<cv::KeyPoint> &keys, 
-    const std::vector<TDescriptor> &descriptors,
-    DetectionResult &match);
+  bool detectLoop(const std::vector<cv::KeyPoint> &keys, const std::vector<TDescriptor> &descriptors, DetectionResult &match,
+                  const std::vector<cv::KeyPoint> &keys_right, const std::vector<TDescriptor> &descriptors_right );
 
   /**
    * Resets the detector and clears the database, such that the next entry
@@ -513,10 +532,12 @@ protected:
   TemplatedDatabase<TDescriptor,F> *m_database;
   
   /// KeyPoints of images
-  vector<vector<cv::KeyPoint> > m_image_keys;
+  
+  vector< StereoVector<cv::KeyPoint> > m_image_keys;
   
   /// Descriptors of images
-  vector<vector<TDescriptor> > m_image_descriptors;
+  
+  vector< StereoVector<TDescriptor> > m_image_descriptors;
   
   /// Last bow vector added to database
   BowVector m_last_bowvec;
@@ -701,10 +722,9 @@ TemplatedLoopDetector<TDescriptor, F>::getVocabulary() const
 // --------------------------------------------------------------------------
 
 template<class TDescriptor, class F>
-bool TemplatedLoopDetector<TDescriptor, F>::detectLoop(
-  const std::vector<cv::KeyPoint> &keys, 
-  const std::vector<TDescriptor> &descriptors,
-  DetectionResult &match)
+bool TemplatedLoopDetector<TDescriptor, F>::detectLoop
+                  (const std::vector<cv::KeyPoint> &keys, const std::vector<TDescriptor> &descriptors, DetectionResult &match,
+                  const std::vector<cv::KeyPoint> &keys_right, const std::vector<TDescriptor> &descriptors_right )
 {
   EntryId entry_id = m_database->size();
   match.query = entry_id;
@@ -799,8 +819,8 @@ bool TemplatedLoopDetector<TDescriptor, F>::detectLoop(
               else if(m_params.geom_check == GEOM_EXHAUSTIVE)
               { 
                 detection = isGeometricallyConsistent_Exhaustive(
-                  m_image_keys[island.best_entry], 
-                  m_image_descriptors[island.best_entry],
+                  m_image_keys[island.best_entry].main, 
+                  m_image_descriptors[island.best_entry].main,
                   keys, descriptors);            
               }
               else // GEOM_NONE, accept the match
@@ -810,13 +830,17 @@ bool TemplatedLoopDetector<TDescriptor, F>::detectLoop(
               
               if(detection)
               {
+                //////////////////////////////////////////////////////////////
+                /////  Logtics Following Successful Detection Here
+                //////////////////////////////////////////////////////////////
+                
                 match.status = LOOP_DETECTED;
 
                 // update keys and descriptors in the result
-                match.query_key = keys;
-                match.match_key = m_image_keys[match.match];
+                match.query_keys = {keys, keys_right};
+                match.match_keys = m_image_keys[match.match];
 
-                match.query_descriptors = descriptors;
+                match.query_descriptors = {descriptors, descriptors_right};
                 match.match_descriptors = m_image_descriptors[match.match];
               }
               else
@@ -856,13 +880,15 @@ bool TemplatedLoopDetector<TDescriptor, F>::detectLoop(
   // m_image_keys and m_image_descriptors have the same length
   if(m_image_keys.size() == entry_id)
   {
-    m_image_keys.push_back(keys);
-    m_image_descriptors.push_back(descriptors);
+    m_image_keys.push_back( StereoVector<cv::KeyPoint>{keys,keys_right} );
+    m_image_descriptors.push_back(StereoVector<TDescriptor>{descriptors, descriptors_right});
   }
   else
   {
-    m_image_keys[entry_id] = keys;
-    m_image_descriptors[entry_id] = descriptors;
+    m_image_keys[entry_id].main = keys;
+    m_image_keys[entry_id].right = keys_right;
+    m_image_descriptors[entry_id].main = descriptors;
+    m_image_descriptors[entry_id].right = descriptors_right;
   }
   
   // store this bowvec if we are going to use it in next iteratons
@@ -1045,7 +1071,7 @@ bool TemplatedLoopDetector<TDescriptor, F>::isGeometricallyConsistent_DI(
       vector<unsigned int> i_old_now, i_cur_now;
       
       getMatches_neighratio(
-        m_image_descriptors[old_entry], old_it->second, 
+        m_image_descriptors[old_entry].main, old_it->second, 
         descriptors, cur_it->second,  
         i_old_now, i_cur_now);
       
@@ -1082,7 +1108,7 @@ bool TemplatedLoopDetector<TDescriptor, F>::isGeometricallyConsistent_DI(
     
     for(; oit != i_old.end(); ++oit, ++cit)
     {
-      const cv::KeyPoint &old_k = m_image_keys[old_entry][*oit];
+      const cv::KeyPoint &old_k = (m_image_keys[old_entry].main)[*oit];
       const cv::KeyPoint &cur_k = keys[*cit];
       
       old_points.push_back(old_k.pt);
@@ -1186,8 +1212,8 @@ bool TemplatedLoopDetector<TDescriptor, F>::isGeometricallyConsistent_Flann
 {
   vector<unsigned int> i_old, i_cur; // indices of correspondences
   
-  const vector<cv::KeyPoint>& old_keys = m_image_keys[old_entry];
-  const vector<TDescriptor>& old_descs = m_image_descriptors[old_entry];
+  const vector<cv::KeyPoint>& old_keys = m_image_keys[old_entry].main;
+  const vector<TDescriptor>& old_descs = m_image_descriptors[old_entry].main;
   const vector<cv::KeyPoint>& cur_keys = keys;
   
   vector<cv::Mat> queryDescs_v(1);

@@ -11,8 +11,8 @@
 #include <string>
 
 // DLoopDetector and DBoW2
-#include <DBoW2.h> // defines BriefVocabulary
-#include "DLoopDetector.h" // defines BriefLoopDetector
+#include <DBoW2/DBoW2.h> // defines BriefVocabulary
+#include <DLoopDetector/DLoopDetector.h> // defines BriefLoopDetector
 #include <DVision/DVision.h> // Brief
 
 // OpenCV
@@ -38,12 +38,18 @@ static const char *IMAGE_DIR="";
 // static const int IMAGE_H = 480;
 // static const char *BRIEF_PATTERN_FILE = "/home/dhl/git/catkin_ws/resources/brief_pattern.yml";
 
+static const int BRIEF_BIT_LENGTH = 256;
+
 // - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - 
 
 /// This functor extracts BRIEF descriptors in the required format
 class BriefExtractor: public FeatureExtractor<FBrief::TDescriptor>
 {
 public:
+
+  // Proper initialisation of BRIEF descriptor
+  BriefExtractor() : m_brief(BRIEF_BIT_LENGTH) {}
+
   /** 
    * Extracts features from an image
    * @param im image
@@ -62,7 +68,7 @@ public:
 private:
 
   /// BRIEF descriptor extractor
-  DVision::BRIEF m_brief;
+  DVision::BRIEF m_brief;  // default: BRIEF(int nbits = 256, int patch_size = 48, Type type = RANDOM_CLOSE);
 };
 
 // - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - 
@@ -81,7 +87,7 @@ int main(int argc, char **argv)
   local_nh.param<std::string>("BRIEF_PATTERN_FILE",BRIEF_PATTERN_FILE, "./BRIEF_PATTERN_FILE" );
 
   // prepares the demo
-  demoDetector<BriefVocabulary, BriefLoopDetector, FBrief::TDescriptor> 
+  demoDetector<BriefVocabulary, BriefLoopDetector, FBrief> 
     demo(VOC_FILE, IMAGE_DIR, POSE_FILE, IMAGE_W, IMAGE_H);
   
   try 
