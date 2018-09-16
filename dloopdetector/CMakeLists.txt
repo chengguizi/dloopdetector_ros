@@ -13,7 +13,8 @@ find_package(catkin REQUIRED COMPONENTS
   sensor_msgs 
   message_filters 
   image_transport 
-  cv_bridge 
+  cv_bridge
+  image_geometry
 
   dbow2
 )
@@ -23,12 +24,13 @@ find_package(catkin REQUIRED COMPONENTS
 find_package(DBoW2 REQUIRED)
 find_package(DLib REQUIRED)
 find_package(OpenCV REQUIRED)
+find_package(Eigen3 REQUIRED)
 
 catkin_package(
 	# INCLUDE_DIRS
 	# LIBRARIES
 	# CATKIN_DEPENDS
-	DEPENDS DBoW2 DLib OpenCV# this is just for checking purposes
+	DEPENDS DBoW2 DLib OpenCV EIGEN3 # this is just for checking purposes
     )
     
 
@@ -40,6 +42,7 @@ if(BUILD_DemoBRIEF)
   add_executable(demo_brief_stereo demo/demo_brief_stereo.cpp)
   target_include_directories(demo_brief_stereo PRIVATE 
     include 
+    ${EIGEN3_INCLUDE_DIRS}
     ${DBoW2_INCLUDE_DIRS} 
     ${DLib_INCLUDE_DIRS}
     ${catkin_INCLUDE_DIRS}

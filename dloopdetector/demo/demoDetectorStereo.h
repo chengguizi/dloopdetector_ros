@@ -28,6 +28,7 @@
 #include <ros/ros.h>
 #include <sensor_msgs/Image.h>
 #include <sensor_msgs/CameraInfo.h>
+#include <image_geometry/stereo_camera_model.h>
 
 #include <message_filters/subscriber.h>
 #include <message_filters/synchronizer.h>
@@ -38,6 +39,9 @@
 
 // Cam Motion Estimation
 #include <CamMotionEstimator/CamMotionEstimator.h>
+
+// TR Estimation from Quad Matches
+#include <CamMotionEstimator/VisoStereo.h>
 
 using namespace DLoopDetector;
 using namespace DBoW2;
@@ -280,6 +284,8 @@ void demoDetector<TVocabulary, TDetector, TFeature>::run
 	
 	CamMotionEstimator<FBrief::TDescriptor, TFeature> camMotionEstimator(m_width, m_height);
 
+	VisualOdometryStereo viso;
+
 	// go
 	while(true)
 	{
@@ -310,6 +316,29 @@ void demoDetector<TVocabulary, TDetector, TFeature>::run
 		cv::Mat im(cv::Size(m_width, m_height), CV_8UC1, (void *)l_cv_ptr->image.data, cv::Mat::AUTO_STEP);
 		cv::Mat im_right(cv::Size(m_width, m_height), CV_8UC1, (void *)r_cv_ptr->image.data, cv::Mat::AUTO_STEP);
 
+		if (db_size == 0) // yet to initlaise
+		{
+			image_geometry::StereoCameraModel model;
+			model.fromCameraInfo(*l_info_msg_, *r_info_msg_);
+
+			VisualOdometryStereo::Parameters viso_param;
+
+			viso_param.base = model.baseline();
+			viso_param.ransac_iters = 200;
+			viso_param.reweighting = false;
+			viso_param.inlier_threshold = 4;
+			viso_param.image_width = m_width;
+			viso_param.image_height = m_height;
+
+			viso_param.calib.f = model.left().fx();
+			viso_param.calib.cu = model.left().cx();
+			viso_param.calib.cv = model.left().cy();
+
+			viso.setParam(viso_param);
+		}
+		
+
+		//////////////////////////////////////////////////////////////////////////////
 		
 		// get features
 		profiler.profile("features");
@@ -334,14 +363,29 @@ void demoDetector<TVocabulary, TDetector, TFeature>::run
 		{
 			cout << "- Loop found query image " << result.query << " with match image " << result.match << "!" << endl;
 
-			camMotionEstimator.pushBackData (result.match_keys.main, result.match_keys.right,
-											result.query_keys.main, result.query_keys.right, 
-											result.match_descriptors.main, result.match_descriptors.right,
-											result.query_descriptors.main, result.query_descriptors.right);
-			
-			if (camMotionEstimator.matchFeaturesQuad())
+			profiler.profile("quadmatch");
+			// query == current, match == past
+			camMotionEstimator.pushBackData (result.match_keys.main, result.query_keys.main, 
+											result.match_keys.right, result.query_keys.right, 
+											result.match_descriptors.main, result.query_descriptors.main,
+											result.match_descriptors.right, result.query_descriptors.right);
+			bool match_result = camMotionEstimator.matchFeaturesQuad();
+			profiler.stop();
+
+			if (match_result)
 			{
-				cout << "matchFeaturesQuad() Done." << endl;
+				profiler.profile("viso");
+				// Obtain matches indices in vectors of 4-element arrays
+				std::vector< std::array<int,4> > matches_quad_vec;
+				camMotionEstimator.getMatchesQuad(matches_quad_vec);
+
+				// previous left --> current left --> current right --> previous right
+				viso.pushBackData(matches_quad_vec, result.match_keys.main, result.query_keys.main,
+					result.query_keys.right, result.match_keys.right);
+
+				viso.estimateMotion();
+				profiler.stop();
+
 			}else
 				cerr << "matchFeaturesQuad() Fails." << endl;
 
@@ -391,8 +435,8 @@ void demoDetector<TVocabulary, TDetector, TFeature>::run
 					break;
 			}
 		}
-		cout << " Loop detection (mean): " << profiler.getMeanTime("detection") * 1e3 << " ms/image" ;
-		cout << endl;
+		cout << " Loop detection (mean): " << profiler.getMeanTime("detection") * 1e3 << " ms/image" << endl;
+		
 		
 		// // show trajectory
 		// if(i > 0)
@@ -422,6 +466,9 @@ void demoDetector<TVocabulary, TDetector, TFeature>::run
 		<< " - Loop detection (mean): " << profiler.getMeanTime("detection") * 1e3
 		<< " ms/image, (max)" << profiler.getMaxTime("detection") * 1e3
 		<< " ms/image" << endl;
+
+		cout << "- Quad matching (mean): " << profiler.getMeanTime("quadmatch") * 1e3 << " ms/image" << endl;
+		cout << "- Viso RT Estimation (mean): " << profiler.getMeanTime("viso") * 1e3 << " ms/image" << endl;
 
 	cout << endl << "Press a key to finish..." << endl;
 	// DUtilsCV::GUI::showImage(implot.getImage(), true, &winplot, 0);
