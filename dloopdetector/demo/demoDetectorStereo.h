@@ -383,8 +383,13 @@ void demoDetector<TVocabulary, TDetector, TFeature>::run
 				viso.pushBackData(matches_quad_vec, result.match_keys.main, result.query_keys.main,
 					result.query_keys.right, result.match_keys.right);
 
-				viso.estimateMotion();
+				bool viso_result = viso.updateMotion();
 				profiler.stop();
+
+				if (viso_result)
+					cout << "TR Estimate" << endl << viso.getMotion() << endl;
+				else
+					cout << "viso: Error Updating Motion." << endl;
 
 			}else
 				cerr << "matchFeaturesQuad() Fails." << endl;

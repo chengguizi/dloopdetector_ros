@@ -82,13 +82,26 @@ public:
         const std::vector<cv::KeyPoint> &keyr1_vec
     );
 
-    std::vector<double>  estimateMotion();
+    
+	bool updateMotion();
+
+	std::vector<int> getInlier() { return getInlier(tr_delta_vec); };
+	
+	Eigen::Matrix<double,4,4> getMotion() { return Tr_delta; }
 
     // deconstructor
 	~VisualOdometryStereo() {}
 
+	friend std::ostream& operator<< (std::ostream &os,VisualOdometryStereo &viso) {
+		auto p = viso.getMotion();
+		os << p(0,0) << " " << p(0,1) << " "  << p(0,2)  << " "  << p(0,3) << " ";
+		os << p(1,0) << " " << p(1,1) << " "  << p(1,2)  << " "  << p(1,3) << " ";
+		os << p(2,0) << " " << p(2,1) << " "  << p(2,2)  << " "  << p(2,3);
+		return os;
+	}
+
 private:
-    bool updateMotion();
+    
     
     enum                 result { UPDATED, FAILED, CONVERGED };
 
@@ -97,9 +110,13 @@ private:
     result               updateParameters(std::vector<int> &active, std::vector<double> &tr, double step_size, double eps);
 	void                 computeResidualsAndJacobian(const std::vector<double> &tr, const std::vector<int> &active, bool inlier_mode = false);
 
+	std::vector<double> estimateMotion();
+
 	std::vector<int>    getInlier(std::vector<double> &tr);
 
     std::vector<int>    getRandomSample (int N,int num);
+
+	Eigen::Matrix<double,4,4> transformationVectorToMatrix(const std::vector<double> &tr);
 
     bool initialised;
     Parameters param;
@@ -114,6 +131,9 @@ private:
     std::vector<double> p_residual; // residuals (p_residual=p_observe-p_predict)
 
     std::vector<int> inliers;
+
+	std::vector<double> tr_delta_vec;
+	Eigen::Matrix<double,4,4> Tr_delta;
 };
 
 
@@ -135,6 +155,24 @@ void VisualOdometryStereo::pushBackData(
     this->keyl2_vec = &keyl2_vec;
     this->keyr1_vec = &keyr1_vec;
     this->keyr2_vec = &keyr2_vec;
+}
+
+bool VisualOdometryStereo::updateMotion () {
+  
+  // estimate motion
+  vector<double> tr_delta = estimateMotion();
+  tr_delta_vec.clear();
+  
+  // on failure
+  if (tr_delta.size()!=6)
+    return false;
+  
+  // set transformation matrix (previous to current frame)
+  Tr_delta = transformationVectorToMatrix(tr_delta);
+  tr_delta_vec = tr_delta;
+  
+  // success
+  return true;
 }
 
 
@@ -223,6 +261,8 @@ vector<double> VisualOdometryStereo::estimateMotion()
 	std::vector<double> tr_delta;				// yx: ransac: bestfit
 	std::vector<double> tr_delta_curr(6,0);
 
+	std::vector<int> best_active;
+
 	// // initial RANSAC estimate
 	for (int k = 0; k < param.ransac_iters; k++)
 	{
@@ -308,10 +348,6 @@ vector<double> VisualOdometryStereo::estimateMotion()
 
         // std::cout << " tr_delta_curr: " ;
 
-        // for (int i=0;i<6;i++)
-        //     cout << tr_delta_curr[i] << ", ";
-        // std::cout << std::endl;
-
 
         // if ( result == UPDATED)
         // {
@@ -328,6 +364,7 @@ vector<double> VisualOdometryStereo::estimateMotion()
         {
             inliers = inliers_curr;
             tr_delta = tr_delta_curr;
+			best_active = active;
         }
 
         // std::cout << "inlier: " << inliers_curr.size() << " out of " << N << std::endl;
@@ -356,11 +393,17 @@ vector<double> VisualOdometryStereo::estimateMotion()
 		std::cout << "ERROR: Inlier % too small! Return false." << std::endl;
 		return vector<double>();
 	}
+
+	std::cout << "Pre-Refinement TR vector: ";
+	for (int i=0;i<6;i++)
+		cout << tr_delta[i] << ", ";
+	std::cout << std::endl;
 	
 	assert (tr_delta.size() == 6);
 	// final optimization (refinement)
 	int iter = 0;
 	VisualOdometryStereo::result result = UPDATED;
+	computeObservations(inliers);
 	while (result == UPDATED)
 	{
 		result = updateParameters(inliers, tr_delta, 1, 1e-8);
@@ -371,13 +414,22 @@ vector<double> VisualOdometryStereo::estimateMotion()
 	}
 
 	if (result == FAILED)
+	{
+		cerr << "WARNING refinement step -> updateParameters FAILED" << endl;
 		return vector<double>();
+	}
 
 	// not converged
 	if (result == UPDATED)
 	{
 		cerr << "WARNING refinement step -> updateParameters NOT converged" << endl;
+		return vector<double>();
 	}
+
+	std::cout << "Post-Refinement TR vector: ";
+	for (int i=0;i<6;i++)
+		cout << tr_delta[i] << ", ";
+	std::cout << std::endl;
 	
 	return tr_delta;
 }
@@ -633,10 +685,35 @@ void VisualOdometryStereo::computeResidualsAndJacobian(const std::vector<double>
         // {
         //     std::cout << 4*i << ": p_residual[4*i]= " << p_residual[4*i] << std::endl;
         // }
-	}
-
-    
+	} 
 }
 
+
+Eigen::Matrix<double,4,4> VisualOdometryStereo::transformationVectorToMatrix( const std::vector<double> &tr ) {
+
+  // extract parameters
+  double rx = tr[0];
+  double ry = tr[1];
+  double rz = tr[2];
+  double tx = tr[3];
+  double ty = tr[4];
+  double tz = tr[5];
+
+  // precompute sine/cosine
+  double sx = sin(rx);
+  double cx = cos(rx);
+  double sy = sin(ry);
+  double cy = cos(ry);
+  double sz = sin(rz);
+  double cz = cos(rz);
+
+  // compute transformation
+  Eigen::Matrix<double,4,4> Tr;
+  Tr(0,0) = +cy*cz;          Tr(0,1) = -cy*sz;          Tr(0,2) = +sy;    Tr(0,3) = tx;
+  Tr(1,0) = +sx*sy*cz+cx*sz; Tr(1,1) = -sx*sy*sz+cx*cz; Tr(1,2) = -sx*cy; Tr(1,3) = ty;
+  Tr(2,0) = -cx*sy*cz+sx*sz; Tr(2,1) = +cx*sy*sz+sx*cz; Tr(2,2) = +cx*cy; Tr(2,3) = tz;
+  Tr(3,0) = 0;               Tr(3,1) = 0;               Tr(3,2) = 0;      Tr(3,3) = 1;
+  return Tr;
+}
 
 #endif // VISO_STEREO_H
