@@ -120,7 +120,7 @@ private:
 //// Implementation of Public Member Functions
 ///////////////////////////////////////////////////////////////////////
 
-
+// l1 - previous left (match), l2 current left (query)
 template<class TDescriptor, class TFeature>
 void CamMotionEstimator<TDescriptor, TFeature>::pushBackData(
                             const std::vector<cv::KeyPoint> &keyl1, 
@@ -172,7 +172,8 @@ bool CamMotionEstimator<TDescriptor, TFeature>::matchFeaturesQuad( int epipolar_
     // cv::BFMatcher matcher;
 
     // Initialise the matches list with all points from 
-    std::cout << "query # keys: " << keyl1->size() << ", match # keys: " << keyl2->size() << std::endl;
+    std::cout << "main: query # keys: " << keyl2->size() << ", match # keys: " << keyl1->size() << std::endl;
+    std::cout << "right: query # keys: " << keyr2->size() << ", match # keys: " << keyl1->size() << std::endl;
 
     matches.clear();
 
@@ -249,7 +250,7 @@ std::vector<int> CamMotionEstimator<TDescriptor, TFeature>::getEpipolarBucketPoi
     // Assume ROW MAJOR bucketing
 
     const float lower_bound_y = max( 0.f  , key.pt.y - epipolar_tolarance) ; // top-left origin x == width direction, https://stackoverflow.com/questions/25642532/opencv-pointx-y-represent-column-row-or-row-column
-    const float upper_bound_y = key.pt.y + epipolar_tolarance;
+    const float upper_bound_y = min( image_height - 1.f, key.pt.y + epipolar_tolarance );
 
     const float lower_bound_x = ( constraint == RIGHT_ONLY ? key.pt.x : 0);
     const float upper_bound_x = ( constraint == LEFT_ONLY ? key.pt.x : image_width-1 );
@@ -273,6 +274,10 @@ std::vector<int> CamMotionEstimator<TDescriptor, TFeature>::getEpipolarBucketPoi
 template<class TDescriptor, class TFeature>
 void CamMotionEstimator<TDescriptor, TFeature>::createBucketIndices(const std::vector<cv::KeyPoint> *keys , 
                                                     std::vector< std::vector<int> > &bucket) {
+    
+    
+    assert ( bucket.size() == n_bucket_width * n_bucket_height);
+
     // Clear the previous bucket cache
     for ( auto &element : bucket )
         element.clear();
@@ -284,6 +289,17 @@ void CamMotionEstimator<TDescriptor, TFeature>::createBucketIndices(const std::v
         int idx = getBucketIndex(key.pt.x, key.pt.y);
         bucket[idx].push_back(i);
     }
+
+    // Debug Output
+    // for (int i = 0 ; i < bucket.size() ; i++)
+    // {
+    //     std::cout << "Bucket [" << i << "]:" << std::endl;
+    //     for (int j = 0; j < bucket[i].size() ; j++)
+    //     {
+    //         cout << bucket[i][j] << ":(" << (*keys)[ bucket[i][j] ].pt.x << "," << (*keys)[ bucket[i][j] ].pt.y << ") ";
+    //     }
+    //     std::cout << std::endl;
+    // }
     
 }
 
@@ -375,10 +391,10 @@ void CamMotionEstimator<TDescriptor, TFeature>::updateMatchList(
             const TDescriptor &des = (*des_sources)[i];
             const cv::KeyPoint &key = (*key_sources)[i];
             int j;
-            if (!use_bucketing) 
-                j = findMatch( des, des_targets );
-            else
+            if (use_bucketing && constraint != NONE) 
                 j = findMatch( getEpipolarBucketPoints(key, bucket, constraint), des, des_targets );
+            else
+                j = findMatch( des, des_targets );
 
             if (j >= 0)
             {
@@ -401,10 +417,10 @@ void CamMotionEstimator<TDescriptor, TFeature>::updateMatchList(
             const TDescriptor &des = (*des_sources)[i];
             const cv::KeyPoint &key = (*key_sources)[i];
             int j;
-            if (!use_bucketing) 
-                j = findMatch( des, des_targets );
-            else
+            if (use_bucketing && constraint != NONE) 
                 j = findMatch( getEpipolarBucketPoints(key, bucket, constraint), des, des_targets );
+            else
+                j = findMatch( des, des_targets );
 
             // Found matches for ith keypoint in the source image to the jth keypoint in the target image
             if (j >= 0)

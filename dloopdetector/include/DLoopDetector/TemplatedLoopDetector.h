@@ -842,6 +842,13 @@ bool TemplatedLoopDetector<TDescriptor, F>::detectLoop
 
                 match.query_descriptors = {descriptors, descriptors_right};
                 match.match_descriptors = m_image_descriptors[match.match];
+
+                assert( match.query_keys.main.size() == match.query_descriptors.main.size() );
+                assert( match.query_keys.right.size() == match.query_descriptors.right.size() );
+
+                assert( match.match_keys.main.size() == match.match_descriptors.main.size() );
+                assert( match.match_keys.right.size() == match.match_descriptors.right.size() );
+
               }
               else
               {

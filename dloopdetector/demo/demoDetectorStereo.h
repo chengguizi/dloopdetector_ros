@@ -364,7 +364,7 @@ void demoDetector<TVocabulary, TDetector, TFeature>::run
 			cout << "- Loop found query image " << result.query << " with match image " << result.match << "!" << endl;
 
 			profiler.profile("quadmatch");
-			// query == current, match == past
+			// l1, l2, r1, r2
 			camMotionEstimator.pushBackData (result.match_keys.main, result.query_keys.main, 
 											result.match_keys.right, result.query_keys.right, 
 											result.match_descriptors.main, result.query_descriptors.main,

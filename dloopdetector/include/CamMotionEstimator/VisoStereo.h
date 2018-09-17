@@ -155,6 +155,11 @@ void VisualOdometryStereo::pushBackData(
     this->keyl2_vec = &keyl2_vec;
     this->keyr1_vec = &keyr1_vec;
     this->keyr2_vec = &keyr2_vec;
+
+	// Sanity checks
+	// The matched index amount should be smaller / equal to available points
+	assert(matches_quad_vec.size() <= min( keyr1_vec.size() ,  keyr2_vec.size() ));
+	
 }
 
 bool VisualOdometryStereo::updateMotion () {
@@ -183,9 +188,6 @@ bool VisualOdometryStereo::updateMotion () {
 vector<double> VisualOdometryStereo::estimateMotion()
 {
 
-	// return value
-	bool success = true;
-
 	// compute minimum distance for RANSAC samples
 	float width_max = 0, height_max = 0;
 	float width_min = 1e5, height_min = 1e5;
@@ -208,7 +210,7 @@ vector<double> VisualOdometryStereo::estimateMotion()
 
     if ( min_dist < param.image_height / 10.f && min_dist < param.image_width / 10.f  )
     {
-        std::cerr << "min_dist is too small (< 0.1*image_dimensions): " << min_dist << std::endl;
+        std::cerr << "min_dist is too small (< 0.1*image_dimensions), aborting viso: " << min_dist << std::endl;
         return vector<double>();
     }
 
