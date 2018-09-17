@@ -27,24 +27,47 @@ class CamMotionEstimator{
 public:
     typedef std::array<int,4> DMatch;
 
-    CamMotionEstimator(int image_width, int image_height, int n_bucket_width = 8, int n_bucket_height = 8, 
-        double max_neighbor_ratio = 0.6, bool use_bucketing = true) 
-    :   image_width(image_width), image_height(image_height),
-        data_ready(false), n_bucket_width(n_bucket_width), n_bucket_height(n_bucket_height), 
-        max_neighbor_ratio(max_neighbor_ratio), use_bucketing(use_bucketing),
-        // calculating the suitable bucket size for the given 2D bucket dimensions
-        bucket_height( (image_height + n_bucket_height - 1 ) / n_bucket_height ), 
-        bucket_width ( (image_width + n_bucket_width - 1 ) / n_bucket_width )
-    {
-        std::cout << "Creating CamMotionEstimator with image size " << image_width << "x" << image_height << ", bucketing " 
-            << n_bucket_width << "x" << n_bucket_height << " ["<< bucket_width << "," << bucket_height << "]" << std::endl;
-        // Reserve # of buckets space in the bucket vector
-        bucketl1.resize(n_bucket_width*n_bucket_height);
-        bucketr1.resize(n_bucket_width*n_bucket_height);
-        bucketl2.resize(n_bucket_width*n_bucket_height);
-        bucketr2.resize(n_bucket_width*n_bucket_height);
-        
+    struct Parameters {
+        // The width and height of the image sequences
+        int image_width, image_height;
+
+        // The number of rows and columns that each image will be bucketed into.
+        // Generally the height of the each bucket should be smaller, to better imposed the epipolar constraints
+        int n_bucket_width = 8, n_bucket_height = 8;
+        int epipolar_tolarance = 10;
+        double max_neighbor_ratio = 0.6;
+        bool use_bucketing= true;
+
+        // This will be set automatically, do not change
+        int bucket_height;
+        int bucket_width;
     };
+
+    CamMotionEstimator() : initialised(false), data_ready(false) {
+        int num_bucket = param.n_bucket_width * param.n_bucket_height;
+        // Reserve # of buckets space in the bucket vector
+        bucketl1.resize(num_bucket);
+        bucketr1.resize(num_bucket);
+        bucketl2.resize(num_bucket);
+        bucketr2.resize(num_bucket);
+    };
+
+    void setParam(Parameters &param){
+
+        // calculating the suitable bucket size for the given 2D bucket dimensions
+        param.bucket_height = (param.image_height + param.n_bucket_height - 1 ) / param.n_bucket_height;
+        param.bucket_width = (param.image_width + param.n_bucket_width - 1 ) / param.n_bucket_width;
+
+        std::cout << std::endl << "CamMotionEstimator parameters loaded!" << std::endl;
+        std::cout << "- image size " << param.image_width << "x" << param.image_height << std::endl
+            << "- bucketing " << param.n_bucket_width << "x" << param.n_bucket_height 
+            << " ["<< param.bucket_width << "," << param.bucket_height << "]" << std::endl;
+
+        std::cout << "==============================================================" << std::endl;
+        
+        this->param = param;
+        initialised = true;
+    }
 
     void pushBackData(const std::vector<cv::KeyPoint> &keyl1, const std::vector<cv::KeyPoint> &keyl2, 
                             const std::vector<cv::KeyPoint> &keyr1, const std::vector<cv::KeyPoint> &keyr2,
@@ -57,29 +80,25 @@ public:
     // 3. current right --> previous right
     // 4. previous right --> previous left
 
-    bool matchFeaturesQuad(int epipolar_tolarance = 10 );
+    bool matchFeaturesQuad();
 
     void getMatchesQuad( std::vector< DMatch > &matches_quad );
 private:
 
+    bool initialised;
+
+    // Indicate whether to use epipolar constraints (if enabled) to bucket points before matching (so less points to match)
     enum HorizontalConstraint {NONE, LEFT_ONLY, RIGHT_ONLY};
+
     // Signal indicating that the quad image sequences are loaded, and
     // ready to be processed for matching and RT estimation.
     bool data_ready;
 
-    // The width and height of the image sequences
-    const int image_width, image_height;
-    
-    // The number of rows and columns that each image will be bucketed into.
-    // Generally the height of the each bucket should be smaller, to better imposed the epipolar constraints
-    bool use_bucketing;
-    int epipolar_tolarance;
-    const int n_bucket_width, n_bucket_height;
-    const int bucket_height, bucket_width;
+    // Containing all the tunable configurations
+    Parameters param;
 
     // Maintain a vector list for each of the four image sequences, for indexing points in each bucket block
     std::vector< std::vector<int> > bucketl1, bucketr1, bucketl2, bucketr2;
-
 
     // Bucket index is ROW MAJOR
     inline int getBucketIndex(float x, float y);
@@ -89,12 +108,8 @@ private:
     void createBucketIndices(const std::vector<cv::KeyPoint> *keys , 
                                 std::vector< std::vector<int> > &bucket);
 
-    // Only store pointers to the actual data of keypoints and their descriptors to avoid copy overhead
-    // NOTE: This class does not store data, so make sure the data is in scope throughout each processing iteration 
-    const std::vector<cv::KeyPoint> *keyl1, *keyl2, *keyr1, *keyr2;
-    const std::vector<TDescriptor> *desl1, *desl2, *desr1, *desr2;
+    
 
-    double max_neighbor_ratio;
     inline int findMatch(   const TDescriptor &query, const std::vector<TDescriptor> *targets );
     inline int findMatch(   const std::vector<int> &inside_bucket, const TDescriptor &query,
                             const std::vector<TDescriptor> *targets );
@@ -107,10 +122,15 @@ private:
                     const std::vector<TDescriptor> *des_sources, 
                     const std::vector<TDescriptor> *des_targets, 
                     const HorizontalConstraint constraint );
-    // Matching results
     
-    std::list< std::array<int,5> > matches;
+    
+    // Only store pointers to the actual data of keypoints and their descriptors to avoid copy overhead
+    // NOTE: This class does not store data, so make sure the data is in scope throughout each processing iteration 
+    const std::vector<cv::KeyPoint> *keyl1, *keyl2, *keyr1, *keyr2;
+    const std::vector<TDescriptor> *desl1, *desl2, *desr1, *desr2;
 
+    // Matching results
+    std::list< std::array<int,5> > matches;
 };
 
 
@@ -131,6 +151,13 @@ void CamMotionEstimator<TDescriptor, TFeature>::pushBackData(
                             const std::vector<TDescriptor> &desl2,
                             const std::vector<TDescriptor> &desr1, 
                             const std::vector<TDescriptor> &desr2 ) {
+
+    if (!initialised)
+    {
+        std::cerr << "CamMotionEstimator NOT initialised." << std::endl;
+        return;
+    }
+        
     // Assignment to pointers
     this->keyl1 = &keyl1;
     this->keyr1 = &keyr1;
@@ -160,14 +187,12 @@ void CamMotionEstimator<TDescriptor, TFeature>::pushBackData(
 
 
 template<class TDescriptor, class TFeature>
-bool CamMotionEstimator<TDescriptor, TFeature>::matchFeaturesQuad( int epipolar_tolarance ) {
+bool CamMotionEstimator<TDescriptor, TFeature>::matchFeaturesQuad() {
     if (!data_ready)
     {
         std::cerr << "CamMotionEstimator ERROR: Data not data_ready." << std::endl;
         return false;
     }
-
-    this->epipolar_tolarance = epipolar_tolarance;
 
     // cv::BFMatcher matcher;
 
@@ -228,17 +253,17 @@ void CamMotionEstimator<TDescriptor, TFeature>::getMatchesQuad( std::vector< DMa
 template<class TDescriptor, class TFeature>
 int CamMotionEstimator<TDescriptor, TFeature>::getBucketIndex(float x, float y) {
     
-    const int idx_y = y / bucket_height;
-    const int idx_x = x / bucket_width;
+    const int idx_y = y / param.bucket_height;
+    const int idx_x = x / param.bucket_width;
 
-    if ( !(idx_y >= 0 && idx_y < n_bucket_height && idx_x >= 0 && idx_x < n_bucket_width) )
+    if ( !(idx_y >= 0 && idx_y < param.n_bucket_height && idx_x >= 0 && idx_x < param.n_bucket_width) )
     {
         std::cout << "x = " << x <<", idx_x = " << idx_x << ", y = " << y <<", idx_y = " << idx_y << std::endl;
         exit(-1);
     }
 
-    int idx = idx_y*n_bucket_width + idx_x;
-    assert (idx >= 0 && idx < n_bucket_height*n_bucket_width);
+    int idx = idx_y*param.n_bucket_width + idx_x;
+    assert (idx >= 0 && idx < param.n_bucket_height*param.n_bucket_width);
 
     return idx;
 }
@@ -249,11 +274,11 @@ std::vector<int> CamMotionEstimator<TDescriptor, TFeature>::getEpipolarBucketPoi
 {
     // Assume ROW MAJOR bucketing
 
-    const float lower_bound_y = max( 0.f  , key.pt.y - epipolar_tolarance) ; // top-left origin x == width direction, https://stackoverflow.com/questions/25642532/opencv-pointx-y-represent-column-row-or-row-column
-    const float upper_bound_y = min( image_height - 1.f, key.pt.y + epipolar_tolarance );
+    const float lower_bound_y = max( 0.f  , key.pt.y - param.epipolar_tolarance) ; // top-left origin x == width direction, https://stackoverflow.com/questions/25642532/opencv-pointx-y-represent-column-row-or-row-column
+    const float upper_bound_y = min( param.image_height - 1.f, key.pt.y + param.epipolar_tolarance );
 
     const float lower_bound_x = ( constraint == RIGHT_ONLY ? key.pt.x : 0);
-    const float upper_bound_x = ( constraint == LEFT_ONLY ? key.pt.x : image_width-1 );
+    const float upper_bound_x = ( constraint == LEFT_ONLY ? key.pt.x : param.image_width-1 );
 
     const int lower_bound_bucket = getBucketIndex( lower_bound_x, lower_bound_y);
     const int upper_bound_bucket = getBucketIndex( upper_bound_x , upper_bound_y);
@@ -276,7 +301,7 @@ void CamMotionEstimator<TDescriptor, TFeature>::createBucketIndices(const std::v
                                                     std::vector< std::vector<int> > &bucket) {
     
     
-    assert ( bucket.size() == n_bucket_width * n_bucket_height);
+    assert ( bucket.size() == param.n_bucket_width * param.n_bucket_height);
 
     // Clear the previous bucket cache
     for ( auto &element : bucket )
@@ -326,7 +351,7 @@ int CamMotionEstimator<TDescriptor, TFeature>::findMatch(const TDescriptor &quer
     }
 
     // If the best match is much better than the second best, then it is most probably a good match (SNR good)
-    if ( best_dist_1 / best_dist_2 < max_neighbor_ratio)
+    if ( best_dist_1 / best_dist_2 < param.max_neighbor_ratio)
     {
         return best_i;
     }
@@ -363,7 +388,7 @@ int CamMotionEstimator<TDescriptor, TFeature>::findMatch( const std::vector<int>
     }
 
     // If the best match is much better than the second best, then it is most probably a good match (SNR good)
-    if ( best_dist_1 / best_dist_2 < max_neighbor_ratio)
+    if ( best_dist_1 / best_dist_2 < param.max_neighbor_ratio)
     {
         return best_i;
     }
@@ -391,7 +416,7 @@ void CamMotionEstimator<TDescriptor, TFeature>::updateMatchList(
             const TDescriptor &des = (*des_sources)[i];
             const cv::KeyPoint &key = (*key_sources)[i];
             int j;
-            if (use_bucketing && constraint != NONE) 
+            if (param.use_bucketing && constraint != NONE) 
                 j = findMatch( getEpipolarBucketPoints(key, bucket, constraint), des, des_targets );
             else
                 j = findMatch( des, des_targets );
@@ -417,7 +442,7 @@ void CamMotionEstimator<TDescriptor, TFeature>::updateMatchList(
             const TDescriptor &des = (*des_sources)[i];
             const cv::KeyPoint &key = (*key_sources)[i];
             int j;
-            if (use_bucketing && constraint != NONE) 
+            if (param.use_bucketing && constraint != NONE) 
                 j = findMatch( getEpipolarBucketPoints(key, bucket, constraint), des, des_targets );
             else
                 j = findMatch( des, des_targets );

@@ -45,19 +45,12 @@ public:
 
     // stereo-specific parameters (mandatory: base)
 	struct Parameters{
-		double  base;             // baseline (meters)
-		int32_t ransac_iters;     // number of RANSAC iterations
-		double  inlier_threshold; // fundamental matrix inlier threshold
-		bool    reweighting;      // lower border weights (more robust to calibration errors)
+		double  base = 1.0;             // baseline (meters)
+		int32_t ransac_iters = 400;     // number of RANSAC iterations
+		double  inlier_threshold = 2.0; // fundamental matrix inlier threshold
+		bool    reweighting = true;      // lower border weights (more robust to calibration errors)
         int image_width;
         int image_height;
-		
-        Parameters() {
-			base = 1.0;
-			ransac_iters = 400;
-			inlier_threshold = 2.0;
-			reweighting = true;
-		}
 
         Calibration calib;
 	};
@@ -65,12 +58,15 @@ public:
     // constructor, takes as inpute a parameter structure
     VisualOdometryStereo() : initialised(false) {}
 
-    void setParam(Parameters param) { 
+    void setParam(Parameters &param) { 
         this->param = param; 
         initialised = true;
-        std::cout << "VisualOdometryStereo parameters loaded!" << std::endl;
-        std::cout << "base=" << this->param.base << ", f=" << this->param.calib.f << ", cu=" << this->param.calib.cu << 
+        std::cout << std::endl << "VisualOdometryStereo parameters loaded!" << std::endl;
+		std::cout << "- image size " << param.image_width << "x" << param.image_height << std::endl;
+		std::cout << "- RANSAC iterations " << param.ransac_iters << std::endl;
+        std::cout << "- base=" << this->param.base << ", f=" << this->param.calib.f << ", cu=" << this->param.calib.cu << 
             ", cv=" << this->param.calib.cv << std::endl;
+		std::cout << "==============================================================" << std::endl;
     }
 
     // Column sequence of matches_quad_vec: previous left, current left, current right, previous right

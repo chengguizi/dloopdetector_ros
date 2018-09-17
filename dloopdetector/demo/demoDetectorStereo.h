@@ -282,8 +282,7 @@ void demoDetector<TVocabulary, TDetector, TFeature>::run
 	int db_size = 0;
 
 	
-	CamMotionEstimator<FBrief::TDescriptor, TFeature> camMotionEstimator(m_width, m_height);
-
+	CamMotionEstimator<FBrief::TDescriptor, TFeature> camMotionEstimator;
 	VisualOdometryStereo viso;
 
 	// go
@@ -335,6 +334,13 @@ void demoDetector<TVocabulary, TDetector, TFeature>::run
 			viso_param.calib.cv = model.left().cy();
 
 			viso.setParam(viso_param);
+
+			typename CamMotionEstimator<FBrief::TDescriptor, TFeature>::Parameters cme_param;
+			cme_param.image_width = m_width;
+			cme_param.image_height = m_height;
+			cme_param.use_bucketing = true;
+
+			camMotionEstimator.setParam(cme_param);
 		}
 		
 
