@@ -5,6 +5,21 @@ project(dloopdetector)
 set(CMAKE_CXX_STANDARD 11)
 set(CMAKE_CXX_STANDARD_REQUIRED ON) # prevent fallback
 
+if(NOT CMAKE_BUILD_TYPE AND NOT CMAKE_CONFIGURATION_TYPES)
+  set(CMAKE_BUILD_TYPE Release CACHE STRING "Choose the type of build." FORCE)
+  set_property(CACHE CMAKE_BUILD_TYPE PROPERTY STRINGS "Debug" "Release"
+    "MinSizeRel" "RelWithDebInfo")
+endif()
+
+# set(CMAKE_CXX_FLAGS "-Wall -Wextra -Wno-sign-conversion")
+# set(CMAKE_CXX_FLAGS_DEBUG "-g")
+set(CMAKE_CXX_FLAGS_RELEASE "-O3")
+
+# may not need this
+# set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -march=native")
+
+# message("CMAKE_BUILD_TYPE is ${CMAKE_BUILD_TYPE}")
+# message("CMAKE_CXX_FLAGS is ${CMAKE_CXX_FLAGS}")
 
 ### configuration for catkin packages
 
@@ -46,6 +61,7 @@ if(BUILD_DemoBRIEF)
     ${DBoW2_INCLUDE_DIRS} 
     ${DLib_INCLUDE_DIRS}
     ${catkin_INCLUDE_DIRS}
+    ${CATKIN_DEVEL_PREFIX}/../../include # to fix bug that include folder doesnt exist at configure time
   )
 
   target_link_libraries(demo_brief_stereo PRIVATE 
