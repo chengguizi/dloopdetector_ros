@@ -9,6 +9,9 @@
 
 #ifndef CAM_MOTION_ESTIMATOR_H
 #define CAM_MOTION_ESTIMATOR_H
+
+#define UNUSED(x) (void)(x)
+
 // OpenCV
 #include <opencv2/core.hpp>
 #include <opencv2/features2d/features2d.hpp>
@@ -19,6 +22,11 @@
 
 #include <iostream>
 #include <cassert>
+
+#include <bitset>
+#include <string>
+
+int distance_counter = 0;
 
 // Class TFeature should implement function: double distance(const TDescriptor &a, const TDescriptor &b)
 template<class TDescriptor, class TFeature>
@@ -202,10 +210,17 @@ bool CamMotionEstimator<TDescriptor, TFeature>::matchFeaturesQuad() {
 
     matches.clear();
 
+    int pre = distance_counter;
+    // TODO: for the NONE case, the homographic transformation could be estimated after a few initial match
     updateMatchList (0, 1, keyl1, bucketl2, keyl2, desl1, desl2, NONE); // previous left --> current left
     updateMatchList (1, 2, keyl2, bucketr2, keyr2, desl2, desr2, LEFT_ONLY); // current left --> current right
     updateMatchList (2, 3, keyr2, bucketr1, keyr1, desr2, desr1, NONE); // current right --> previous right
     updateMatchList (3, 4, keyr1, bucketl1, keyl1, desr1, desl1, RIGHT_ONLY); // previous right --> previous left
+
+        
+
+    std::cout << "distance() routine is called " << distance_counter - pre <<  " times" << std::endl;
+    
 
     int list_size = matches.size();
 
@@ -222,7 +237,7 @@ bool CamMotionEstimator<TDescriptor, TFeature>::matchFeaturesQuad() {
     std::cout << "Matching loop closes: " << matches.size() << " of " << list_size << std::endl;
     
     data_ready = false;
-    return true;
+    return matches.size();
 }
 
 
@@ -274,8 +289,8 @@ std::vector<int> CamMotionEstimator<TDescriptor, TFeature>::getEpipolarBucketPoi
 {
     // Assume ROW MAJOR bucketing
 
-    const float lower_bound_y = max( 0.f  , key.pt.y - param.epipolar_tolarance) ; // top-left origin x == width direction, https://stackoverflow.com/questions/25642532/opencv-pointx-y-represent-column-row-or-row-column
-    const float upper_bound_y = min( param.image_height - 1.f, key.pt.y + param.epipolar_tolarance );
+    const float lower_bound_y = std::max( 0.f  , key.pt.y - param.epipolar_tolarance) ; // top-left origin x == width direction, https://stackoverflow.com/questions/25642532/opencv-pointx-y-represent-column-row-or-row-column
+    const float upper_bound_y = std::min( param.image_height - 1.f, key.pt.y + param.epipolar_tolarance );
 
     const float lower_bound_x = ( constraint == RIGHT_ONLY ? key.pt.x : 0);
     const float upper_bound_x = ( constraint == LEFT_ONLY ? key.pt.x : param.image_width-1 );
@@ -301,14 +316,14 @@ void CamMotionEstimator<TDescriptor, TFeature>::createBucketIndices(const std::v
                                                     std::vector< std::vector<int> > &bucket) {
     
     
-    assert ( bucket.size() == param.n_bucket_width * param.n_bucket_height);
+    assert ( (int)bucket.size() == param.n_bucket_width * param.n_bucket_height);
 
     // Clear the previous bucket cache
     for ( auto &element : bucket )
         element.clear();
 
     // Iterate all keypoints and add them to the correct bucket list
-    for (int i = 0 ; i < keys->size() ; i++)
+    for (size_t i = 0 ; i < keys->size() ; i++)
     {
         const cv::KeyPoint &key = (*keys)[i];
         int idx = getBucketIndex(key.pt.x, key.pt.y);
@@ -332,14 +347,15 @@ template<class TDescriptor, class TFeature>
 int CamMotionEstimator<TDescriptor, TFeature>::findMatch(const TDescriptor &query,
                             const std::vector<TDescriptor> *targets )
 {
-    double best_dist_1 = 1e9;
-    double best_dist_2 = 1e9;
+    int best_dist_1 = 1e9;
+    int best_dist_2 = 1e9;
     int best_i = -1;
 
     //// Not using bucketing
-    for (int i = 0; i < targets->size(); i++)
+    for (size_t i = 0; i < targets->size(); i++)
     {
-        double dist = TFeature::distance(query,(*targets)[i]);
+        int dist = (query^(*targets)[i]).count(); //TFeature::distance(query,(*targets)[i]);
+        distance_counter++;
 
         if (dist < best_dist_1 ) {
             best_i = i;
@@ -351,7 +367,7 @@ int CamMotionEstimator<TDescriptor, TFeature>::findMatch(const TDescriptor &quer
     }
 
     // If the best match is much better than the second best, then it is most probably a good match (SNR good)
-    if ( best_dist_1 / best_dist_2 < param.max_neighbor_ratio)
+    if ( best_dist_1 / (double)best_dist_2 < param.max_neighbor_ratio)
     {
         return best_i;
     }
@@ -362,8 +378,8 @@ template<class TDescriptor, class TFeature>
 int CamMotionEstimator<TDescriptor, TFeature>::findMatch( const std::vector<int> &inside_bucket, const TDescriptor &query,
                             const std::vector<TDescriptor> *targets )
 {
-    double best_dist_1 = 1e9;
-    double best_dist_2 = 1e9;
+    int best_dist_1 = 1e9;
+    int best_dist_2 = 1e9;
     int best_i = -1;
 
     // there is no suitable bucketed target points to be matched, early return
@@ -372,11 +388,12 @@ int CamMotionEstimator<TDescriptor, TFeature>::findMatch( const std::vector<int>
 
     // std::cout << "Bucketing " << inside_bucket.size() << " target features out of " << targets->size() << std::endl;
 
-    for ( int idx = 0 ; idx < inside_bucket.size() ; idx++ )
+    for ( size_t idx = 0 ; idx < inside_bucket.size() ; idx++ )
     {
         int i = inside_bucket[idx];
 
-        double dist = TFeature::distance(query,(*targets)[i]);
+        int dist = (query^(*targets)[i]).count(); //TFeature::distance(query,(*targets)[i]);
+        distance_counter++;
 
         if (dist < best_dist_1 ) {
             best_i = i;
@@ -388,7 +405,7 @@ int CamMotionEstimator<TDescriptor, TFeature>::findMatch( const std::vector<int>
     }
 
     // If the best match is much better than the second best, then it is most probably a good match (SNR good)
-    if ( best_dist_1 / best_dist_2 < param.max_neighbor_ratio)
+    if ( best_dist_1 / (double)best_dist_2 < param.max_neighbor_ratio)
     {
         return best_i;
     }
@@ -406,12 +423,14 @@ void CamMotionEstimator<TDescriptor, TFeature>::updateMatchList(
                 const std::vector<TDescriptor> *des_targets,
                 const HorizontalConstraint constraint  ) {
 
+    UNUSED(key_targets);
+
     // if matches_source is zero, means the match list needs initialisation
     if (matches_source == 0) {
 
         assert (matches.empty());
 
-        for ( int i = 0; i < (*key_sources).size() ; i++ )
+        for ( size_t i = 0; i < (*key_sources).size() ; i++ )
         {
             const TDescriptor &des = (*des_sources)[i];
             const cv::KeyPoint &key = (*key_sources)[i];
@@ -423,7 +442,7 @@ void CamMotionEstimator<TDescriptor, TFeature>::updateMatchList(
 
             if (j >= 0)
             {
-                matches.push_back({i,j,0,0,0});
+                matches.push_back({(int)i,j,0,0,0});
             }
         }
 

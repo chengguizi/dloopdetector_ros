@@ -13,7 +13,7 @@
 // DLoopDetector and DBoW2
 #include <DBoW2/DBoW2.h> // defines BriefVocabulary
 #include <DLoopDetector/DLoopDetector.h> // defines BriefLoopDetector
-#include <DVision/DVision.h> // Brief
+#include <DVision/DVision.h> // Brief extractor
 
 // OpenCV
 #include <opencv2/core.hpp>
@@ -25,13 +25,10 @@
 #include <ros/ros.h>
 
 using namespace DLoopDetector;
-using namespace DBoW2;
-using namespace DVision;
-using namespace std;
 
 // ----------------------------------------------------------------------------
 
-static const char *VOC_FILE = "/home/dhl/git/catkin_ws/resources/brief_k10L6.voc.gz";
+// static const char *VOC_FILE = "/home/dhl/git/catkin_ws/resources/brief_k10L6.voc.gz";
 static const char *POSE_FILE="";
 static const char *IMAGE_DIR="";
 // static const int IMAGE_W = 640; // image size
@@ -43,7 +40,7 @@ static const int BRIEF_BIT_LENGTH = 256;
 // - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - 
 
 /// This functor extracts BRIEF descriptors in the required format
-class BriefExtractor: public FeatureExtractor<FBrief::TDescriptor>
+class BriefExtractor: public FeatureExtractor<DBoW2::FBrief::TDescriptor>
 {
 public:
 
@@ -57,7 +54,7 @@ public:
    * @param descriptors descriptors extracted
    */
   virtual void operator()(const cv::Mat &im, 
-    vector<cv::KeyPoint> &keys, vector<BRIEF::bitset> &descriptors) const;
+    std::vector<cv::KeyPoint> &keys, std::vector<DBoW2::FBrief::TDescriptor> &descriptors) const;
 
   /**
    * Creates the brief extractor with the given pattern file
@@ -79,7 +76,7 @@ int main(int argc, char **argv)
 
 	ros::NodeHandle local_nh("~");
 
-  string VOC_FILE, BRIEF_PATTERN_FILE;
+  std::string VOC_FILE, BRIEF_PATTERN_FILE;
   int IMAGE_W, IMAGE_H;
   local_nh.param("IMAGE_W",IMAGE_W, 1280 );
   local_nh.param("IMAGE_H",IMAGE_H, 720 );
@@ -87,7 +84,7 @@ int main(int argc, char **argv)
   local_nh.param<std::string>("BRIEF_PATTERN_FILE",BRIEF_PATTERN_FILE, "./BRIEF_PATTERN_FILE" );
 
   // prepares the demo
-  demoDetector<BriefVocabulary, BriefLoopDetector, FBrief> 
+  demoDetector<BriefVocabulary, BriefLoopDetector, DBoW2::FBrief> 
     demo(VOC_FILE, IMAGE_DIR, POSE_FILE, IMAGE_W, IMAGE_H);
   
   try 
@@ -98,7 +95,7 @@ int main(int argc, char **argv)
   }
   catch(const std::string &ex)
   {
-    cout << "Error: " << ex << endl;
+    std::cout << "Error: " << ex << std::endl;
   }
 
   return 0;
@@ -115,9 +112,9 @@ BriefExtractor::BriefExtractor(const std::string &pattern_file)
   
   // loads the pattern
   cv::FileStorage fs(pattern_file.c_str(), cv::FileStorage::READ);
-  if(!fs.isOpened()) throw string("Could not open file ") + pattern_file;
+  if(!fs.isOpened()) throw std::string("Could not open file ") + pattern_file;
   
-  vector<int> x1, y1, x2, y2;
+  std::vector<int> x1, y1, x2, y2;
   fs["x1"] >> x1;
   fs["x2"] >> x2;
   fs["y1"] >> y1;
@@ -129,7 +126,7 @@ BriefExtractor::BriefExtractor(const std::string &pattern_file)
 // ----------------------------------------------------------------------------
 
 void BriefExtractor::operator() (const cv::Mat &im, 
-  vector<cv::KeyPoint> &keys, vector<BRIEF::bitset> &descriptors) const
+  std::vector<cv::KeyPoint> &keys, std::vector<DBoW2::FBrief::TDescriptor> &descriptors) const
 {
   // extract FAST keypoints with opencv
   const int fast_th = 20; // corner detector response threshold

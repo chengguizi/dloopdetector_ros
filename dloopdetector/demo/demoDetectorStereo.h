@@ -19,10 +19,10 @@
 
 // DLoopDetector and DBoW2
 #include <DBoW2/DBoW2.h>
-#include <DLoopDetector/DLoopDetector.h>
+
 #include <DUtils/DUtils.h>
 #include <DUtilsCV/DUtilsCV.h>
-#include <DVision/DVision.h>
+#include <DLoopDetector/DLoopDetector.h>
 
 // ROS Integration
 #include <ros/ros.h>
@@ -44,8 +44,6 @@
 #include <CamMotionEstimator/VisoStereo.h>
 
 using namespace DLoopDetector;
-using namespace DBoW2;
-using namespace std;
 
 // - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - 
 
@@ -61,7 +59,7 @@ public:
 	 * @param descriptors descriptors extracted
 	 */
 	virtual void operator()(const cv::Mat &im, 
-		vector<cv::KeyPoint> &keys, vector<TDescriptor> &descriptors) const = 0;
+		std::vector<cv::KeyPoint> &keys, std::vector<TDescriptor> &descriptors) const = 0;
 };
 
 // - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - 
@@ -163,9 +161,9 @@ template<class TVocabulary, class TDetector, class TFeature>
 void demoDetector<TVocabulary, TDetector, TFeature>::run
 	(const std::string &name, const FeatureExtractor<TDescriptor> &extractor)
 {
-	cout << "DLoopDetector Demo - Modified by Cheng Huimin" << endl 
-		<< "Dorian Galvez-Lopez" << endl
-		<< "http://doriangalvez.com" << endl << endl;
+	std::cout << "DLoopDetector Demo - Modified by Cheng Huimin" << std::endl 
+		<< "Dorian Galvez-Lopez" << std::endl
+		<< "http://doriangalvez.com" << std::endl << std::endl;
 	
 	// Set loop detector parameters
 	typename TDetector::Parameters params(m_height, m_width);
@@ -209,16 +207,16 @@ void demoDetector<TVocabulary, TDetector, TFeature>::run
 	//
 	
 	// Load the vocabulary to use
-	cout << "Loading " << name << " vocabulary..." << endl;
+	std::cout << "Loading " << name << " vocabulary..." << std::endl;
 	TVocabulary voc(m_vocfile);
 	
 	// Initiate loop detector with the vocabulary 
-	cout << "Processing sequence..." << endl;
+	std::cout << "Processing sequence..." << std::endl;
 	TDetector detector(voc, params); // typedef TemplatedLoopDetector
 	
 	// Process images
-	vector<cv::KeyPoint> keys, keys_right;
-	vector<TDescriptor> descriptors, descriptors_right;
+	std::vector<cv::KeyPoint> keys, keys_right;
+	std::vector<TDescriptor> descriptors, descriptors_right;
 
 	// load image filenames  
 	// vector<string> filenames = 
@@ -229,7 +227,7 @@ void demoDetector<TVocabulary, TDetector, TFeature>::run
 	// readPoseFile(m_posefile.c_str(), xs, ys);
 	
 	// we can allocate memory for the expected number of images
-	cout << "Allocating memory for detector" << endl;
+	std::cout << "Allocating memory for detector" << std::endl;
 	// detector.allocate(filenames.size());
 	detector.allocate(1000);
 
@@ -282,7 +280,7 @@ void demoDetector<TVocabulary, TDetector, TFeature>::run
 	int db_size = 0;
 
 	
-	CamMotionEstimator<FBrief::TDescriptor, TFeature> camMotionEstimator;
+	CamMotionEstimator<TDescriptor, TFeature> camMotionEstimator;
 	VisualOdometryStereo viso;
 
 	// go
@@ -299,14 +297,14 @@ void demoDetector<TVocabulary, TDetector, TFeature>::run
 
 		if(!ros::ok())
 		{
-			cout << "ROS Shutting down" << endl;
+			std::cout << "ROS Shutting down" << std::endl;
 			break;
 		}
 		
-		cout << "Adding image " << db_size << endl;
+		std::cout << "Adding image " << db_size << std::endl;
 
 		// Retrive images from ROS
-		uint8_t *l_image_data, r_image_data;
+		// uint8_t *l_image_data, r_image_data;
 		cv_bridge::CvImageConstPtr l_cv_ptr, r_cv_ptr;
 		l_cv_ptr = cv_bridge::toCvShare(l_image_msg_, sensor_msgs::image_encodings::MONO8);
 		r_cv_ptr = cv_bridge::toCvShare(r_image_msg_, sensor_msgs::image_encodings::MONO8);
@@ -335,7 +333,7 @@ void demoDetector<TVocabulary, TDetector, TFeature>::run
 
 			viso.setParam(viso_param);
 
-			typename CamMotionEstimator<FBrief::TDescriptor, TFeature>::Parameters cme_param;
+			typename CamMotionEstimator<TDescriptor, TFeature>::Parameters cme_param;
 			cme_param.image_width = m_width;
 			cme_param.image_height = m_height;
 			cme_param.use_bucketing = true;
@@ -367,7 +365,7 @@ void demoDetector<TVocabulary, TDetector, TFeature>::run
 		
 		if(result.detection())
 		{
-			cout << "- Loop found query image " << result.query << " with match image " << result.match << "!" << endl;
+			std::cout << "- Loop found query image " << result.query << " with match image " << result.match << "!" << std::endl;
 
 			profiler.profile("quadmatch");
 			// l1, l2, r1, r2
@@ -393,60 +391,59 @@ void demoDetector<TVocabulary, TDetector, TFeature>::run
 				profiler.stop();
 
 				if (viso_result)
-					cout << "TR Estimate" << endl << viso.getMotion() << endl;
+					std::cout << "TR Estimate" << std::endl << viso.getCameraMotion() << std::endl;
 				else
-					cout << "viso: Error Updating Motion." << endl;
+					std::cout << "viso: Error Updating Motion." << std::endl;
 
 			}else
-				cerr << "matchFeaturesQuad() Fails." << endl;
+				std::cerr << "matchFeaturesQuad() Fails." << std::endl;
 
-			//CamMotionEstimator<TDescriptor>::computeRTfromStereo(result.query_keys, result.match_keys, result.query_descriptors,  result.match_descriptors);
 			++count;
 		}
 		else
 		{
-			cout << "- No loop: ";
+			std::cout << "- No loop: ";
 			switch(result.status)
 			{
 				case CLOSE_MATCHES_ONLY:
-					cout << "All the images in the database are very recent" << endl;
+					std::cout << "All the images in the database are very recent" << std::endl;
 					break;
 					
 				case NO_DB_RESULTS:
-					cout << "There are no matches against the database (few features in"
-						" the image?)" << endl;
+					std::cout << "There are no matches against the database (few features in"
+						" the image?)" << std::endl;
 					break;
 					
 				case LOW_NSS_FACTOR:
-					cout << "Little overlap between this image and the previous one"
-						<< endl;
+					std::cout << "Little overlap between this image and the previous one"
+						<< std::endl;
 					break;
 						
 				case LOW_SCORES:
-					cout << "No match reaches the score threshold (alpha: " <<
-						params.alpha << ")" << endl;
+					std::cout << "No match reaches the score threshold (alpha: " <<
+						params.alpha << ")" << std::endl;
 					break;
 					
 				case NO_GROUPS:
-					cout << "Not enough close matches to create groups. "
-						<< "Best candidate: " << result.match << endl;
+					std::cout << "Not enough close matches to create groups. "
+						<< "Best candidate: " << result.match << std::endl;
 					break;
 					
 				case NO_TEMPORAL_CONSISTENCY:
-					cout << "No temporal consistency (k: " << params.k << "). "
-						<< "Best candidate: " << result.match << endl;
+					std::cout << "No temporal consistency (k: " << params.k << "). "
+						<< "Best candidate: " << result.match << std::endl;
 					break;
 					
 				case NO_GEOMETRICAL_CONSISTENCY:
-					cout << "No geometrical consistency. Best candidate: " 
-						<< result.match << endl;
+					std::cout << "No geometrical consistency. Best candidate: " 
+						<< result.match << std::endl;
 					break;
 					
 				default:
 					break;
 			}
 		}
-		cout << " Loop detection (mean): " << profiler.getMeanTime("detection") * 1e3 << " ms/image" << endl;
+		std::cout << " Loop detection (mean): " << profiler.getMeanTime("detection") * 1e3 << " ms/image" << std::endl;
 		
 		
 		// // show trajectory
@@ -463,25 +460,25 @@ void demoDetector<TVocabulary, TDetector, TFeature>::run
 	
 	if(count == 0)
 	{
-		cout << "No loops found in this image sequence" << endl;
+		std::cout << "No loops found in this image sequence" << std::endl;
 	}
 	else
 	{
-		cout << count << " loops found in this image sequence!" << endl;
+		std::cout << count << " loops found in this image sequence!" << std::endl;
 	} 
 
-	cout << endl << "Execution time:" << endl
+	std::cout << std::endl << "Execution time:" << std::endl
 		<< " - Feature computation : (mean) " << profiler.getMeanTime("features") * 1e3
 		<< " ms/image, (max)" << profiler.getMaxTime("features") * 1e3
-		<< " ms/image" << endl
+		<< " ms/image" << std::endl
 		<< " - Loop detection (mean): " << profiler.getMeanTime("detection") * 1e3
 		<< " ms/image, (max)" << profiler.getMaxTime("detection") * 1e3
-		<< " ms/image" << endl;
+		<< " ms/image" << std::endl;
 
-		cout << "- Quad matching (mean): " << profiler.getMeanTime("quadmatch") * 1e3 << " ms/image" << endl;
-		cout << "- Viso RT Estimation (mean): " << profiler.getMeanTime("viso") * 1e3 << " ms/image" << endl;
+		std::cout << "- Quad matching (mean): " << profiler.getMeanTime("quadmatch") * 1e3 << " ms/image" << std::endl;
+		std::cout << "- Viso RT Estimation (mean): " << profiler.getMeanTime("viso") * 1e3 << " ms/image" << std::endl;
 
-	cout << endl << "Press a key to finish..." << endl;
+	std::cout << std::endl << "Press a key to finish..." << std::endl;
 	// DUtilsCV::GUI::showImage(implot.getImage(), true, &winplot, 0);
 }
 
@@ -495,9 +492,9 @@ void demoDetector<TVocabulary, TDetector, TFeature>::readPoseFile
 	xs.clear();
 	ys.clear();
 	
-	fstream f(filename, ios::in);
+	std::fstream f(filename, std::ios::in);
 	
-	string s;
+	std::string s;
 	double ts, x, y, t;
 	while(!f.eof())
 	{

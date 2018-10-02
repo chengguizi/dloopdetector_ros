@@ -16,25 +16,22 @@ set(CMAKE_CXX_FLAGS "-Wall -Wextra")
 # set(CMAKE_CXX_FLAGS_DEBUG "-g")
 set(CMAKE_CXX_FLAGS_RELEASE "-O3")
 
+# This should come before any other packages
+find_package(catkin REQUIRED)
+catkin_package(
+	# INCLUDE_DIRS DBoW2/include
+	# LIBRARIES DBoW2# this is needed to include library names into ${PROJECT_NAME}Config.cmake
+	# CATKIN_DEPENDS roscpp std_msgs
+	# DEPENDS system_lib
+	)
+
 # git clone the specific dbow2 library from origin
 include(ExternalProject)
 ExternalProject_Add(dbow2_external_git
 	PREFIX ${CMAKE_CURRENT_BINARY_DIR}/dependencies
 	GIT_REPOSITORY http://github.com/dorian3d/DBoW2
-	GIT_TAG v1.1-nonfree
+	# GIT_TAG v1.1-nonfree
 	INSTALL_DIR ${CATKIN_DEVEL_PREFIX}
 	CMAKE_ARGS -DCMAKE_INSTALL_PREFIX=<INSTALL_DIR> # CATKIN_DEVEL_PREFIX will make .cmake file appear in private devel folder
     # DEPENDS
 	)
-
-# message("CATKIN_DEVEL_PREFIX is ${CATKIN_DEVEL_PREFIX}")
-
-# This should come before any other packages
-find_package(catkin REQUIRED)
-catkin_package(
-	# INCLUDE_DIRS ${CATKIN_DEVEL_PREFIX}/../../include
-	# LIBRARIES DBoW2 DLib# this is needed to include library names into ${PROJECT_NAME}Config.cmake
-	# CATKIN_DEPENDS roscpp std_msgs
-	# DEPENDS system_lib
-	)
-

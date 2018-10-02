@@ -11,7 +11,7 @@ if(NOT CMAKE_BUILD_TYPE AND NOT CMAKE_CONFIGURATION_TYPES)
     "MinSizeRel" "RelWithDebInfo")
 endif()
 
-# set(CMAKE_CXX_FLAGS "-Wall -Wextra -Wno-sign-conversion")
+# set(CMAKE_CXX_FLAGS "-Wall -Wextra")
 # set(CMAKE_CXX_FLAGS_DEBUG "-g")
 set(CMAKE_CXX_FLAGS_RELEASE "-O3")
 
@@ -32,12 +32,12 @@ find_package(catkin REQUIRED COMPONENTS
   image_geometry
 
   dbow2
+  dlib_ros
 )
 
 # set(DEPENDENCY_DIR ${CMAKE_BINARY_DIR}/dependencies)
 # set(DEPENDENCY_INSTALL_DIR ${DEPENDENCY_DIR}/install)
 find_package(DBoW2 REQUIRED)
-find_package(DLib REQUIRED)
 find_package(OpenCV REQUIRED)
 find_package(Eigen3 REQUIRED)
 
@@ -45,7 +45,7 @@ catkin_package(
 	# INCLUDE_DIRS
 	# LIBRARIES
 	# CATKIN_DEPENDS
-	DEPENDS DBoW2 DLib OpenCV EIGEN3 # this is just for checking purposes
+	DEPENDS DBoW2 OpenCV EIGEN3 #  DLib this is just for checking purposes
     )
     
 

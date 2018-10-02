@@ -16,20 +16,15 @@
 #include <string>
 #include <cassert>
 
-#include <opencv/cv.h>
+#include <opencv2/core.hpp>
+#include <opencv2/features2d/features2d.hpp>
 
 #include "DBoW2/TemplatedVocabulary.h"
 #include "DBoW2/TemplatedDatabase.h"
 #include "DBoW2/QueryResults.h"
 #include "DBoW2/BowVector.h"
 
-#include "DUtils/DUtils.h"
-#include "DUtilsCV/DUtilsCV.h"
 #include "DVision/DVision.h"
-
-using namespace std;
-using namespace DUtils;
-using namespace DBoW2;
 
 namespace DLoopDetector {
 
@@ -78,8 +73,8 @@ public:
 
   template <typename Tstereo> // cv::KeyPoint or TDescriptor
   struct StereoVector{
-    vector< Tstereo > main;
-    vector< Tstereo > right;
+    std::vector< Tstereo > main;
+    std::vector< Tstereo > right;
 
     std::size_t size(){
       auto size = main.size();
@@ -101,9 +96,9 @@ public:
     /// Detection status. LOOP_DETECTED iff loop detected
     DetectionStatus status;
     /// Query id
-    EntryId query;
+    DBoW2::EntryId query;
     /// Matched id if loop detected, otherwise, best candidate 
-    EntryId match;
+    DBoW2::EntryId match;
 
     /// KeyPoints of images
     StereoVector<cv::KeyPoint>  query_keys;
@@ -219,7 +214,7 @@ public:
    * @param voc vocabulary
    * @param params loop detector parameters
    */
-  TemplatedLoopDetector(const TemplatedVocabulary<TDescriptor, F> &voc,
+  TemplatedLoopDetector(const DBoW2::TemplatedVocabulary<TDescriptor, F> &voc,
     const Parameters &params = Parameters());
   
   /**
@@ -228,7 +223,7 @@ public:
    * @param db database to copy
    * @param params loop detector parameters
    */
-  TemplatedLoopDetector(const TemplatedDatabase<TDescriptor, F> &db,
+  TemplatedLoopDetector(const DBoW2::TemplatedDatabase<TDescriptor, F> &db,
     const Parameters &params = Parameters());
 
   /**
@@ -250,13 +245,13 @@ public:
    * Retrieves a reference to the database used by the loop detector
    * @return const reference to database
    */
-  inline const TemplatedDatabase<TDescriptor, F>& getDatabase() const;
+  inline const DBoW2::TemplatedDatabase<TDescriptor, F>& getDatabase() const;
   
   /**
    * Retrieves a reference to the vocabulary used by the loop detector
    * @return const reference to vocabulary
    */
-  inline const TemplatedVocabulary<TDescriptor, F>& getVocabulary() const;
+  inline const DBoW2::TemplatedVocabulary<TDescriptor, F>& getVocabulary() const;
   
   /**
    * Sets the database to use. The contents of the database and the detector
@@ -271,7 +266,7 @@ public:
    * Sets a new DBoW2 database created from the given vocabulary
    * @param voc vocabulary to copy
    */
-  void setVocabulary(const TemplatedVocabulary<TDescriptor, F>& voc);
+  void setVocabulary(const DBoW2::TemplatedVocabulary<TDescriptor, F>& voc);
   
   /**
    * Allocates some memory for the first entries
@@ -303,14 +298,14 @@ protected:
   struct tIsland
   {
     /// Island starting entry
-    EntryId first;
+    DBoW2::EntryId first;
     /// Island ending entry
-    EntryId last;
+    DBoW2::EntryId last;
     /// Island score
     double score; // score of island
     
     /// Entry of the island with the highest score
-    EntryId best_entry; // id and score of the entry with the highest score
+    DBoW2::EntryId best_entry; // id and score of the entry with the highest score
     /// Highest single score in the island
     double best_score;  // in the island
     
@@ -324,7 +319,7 @@ protected:
      * @param f first entry
      * @param l last entry
      */
-    tIsland(EntryId f, EntryId l): first(f), last(l){}
+    tIsland(DBoW2::EntryId f, DBoW2::EntryId l): first(f), last(l){}
     
     /**
      * Creates an island
@@ -332,7 +327,7 @@ protected:
      * @param l last entry
      * @param s island score
      */
-    tIsland(EntryId f, EntryId l, double s): first(f), last(l), score(s){}
+    tIsland(DBoW2::EntryId f, DBoW2::EntryId l, double s): first(f), last(l), score(s){}
     
     /**
      * Says whether this score is less than the score of another island
@@ -390,7 +385,7 @@ protected:
      */
     std::string toString() const
     {
-      stringstream ss;
+      std::stringstream ss;
       ss << "[" << first << "-" << last << ": " << score << " | best: <"
         << best_entry << ": " << best_score << "> ] ";
       return ss.str();
@@ -403,7 +398,7 @@ protected:
     /// Island matched in the last query
     tIsland last_matched_island;
     /// Last query id
-    EntryId last_query_id;
+    DBoW2::EntryId last_query_id;
     /// Number of consistent entries in the window
     int nentries;
     
@@ -422,14 +417,14 @@ protected:
    * @param q results from query
    * @param threshold min value of the resting results
    */
-  void removeLowScores(QueryResults &q, double threshold) const;
+  void removeLowScores(DBoW2::QueryResults &q, double threshold) const;
   
   /**
    * Returns the islands of the given matches in ascending order of entry ids
    * @param q 
    * @param islands (out) computed islands
    */
-  void computeIslands(QueryResults &q, vector<tIsland> &islands) const;
+  void computeIslands(DBoW2::QueryResults &q, std::vector<tIsland> &islands) const;
   
   /**
    * Returns the score of the island composed of the entries of q whose indices
@@ -439,7 +434,7 @@ protected:
    * @param i_last last index of q of the island
    * @return island score
    */
-  double calculateIslandScore(const QueryResults &q, unsigned int i_first, 
+  double calculateIslandScore(const DBoW2::QueryResults &q, unsigned int i_first, 
     unsigned int i_last) const;
 
   /**
@@ -448,7 +443,7 @@ protected:
    * @param matched_island
    * @param entry_id
    */
-  void updateTemporalWindow(const tIsland &matched_island, EntryId entry_id);
+  void updateTemporalWindow(const tIsland &matched_island, DBoW2::EntryId entry_id);
   
   /**
    * Returns the number of consistent islands in the temporal window
@@ -467,10 +462,10 @@ protected:
    * @param descriptors current descriptors associated to the given keypoints
    * @param curvec feature vector of the current entry 
    */
-  bool isGeometricallyConsistent_DI(EntryId old_entry, 
+  bool isGeometricallyConsistent_DI(DBoW2::EntryId old_entry, 
     const std::vector<cv::KeyPoint> &keys, 
     const std::vector<TDescriptor> &descriptors, 
-    const FeatureVector &curvec) const;
+    const DBoW2::FeatureVector &curvec) const;
   
   /**
    * Checks if an old entry is geometrically consistent (by using FLANN and 
@@ -481,7 +476,7 @@ protected:
    * @param descriptors current descriptors
    * @param flann_structure flann structure with the descriptors of the current entry
    */
-  bool isGeometricallyConsistent_Flann(EntryId old_entry,
+  bool isGeometricallyConsistent_Flann(DBoW2::EntryId old_entry,
     const std::vector<cv::KeyPoint> &keys, 
     const std::vector<TDescriptor> &descriptors,
     cv::FlannBasedMatcher &flann_structure) const;
@@ -521,26 +516,26 @@ protected:
    * @param i_match_B (out) indices of descriptors matched (s.t. B[i_match_B])
    */
   void getMatches_neighratio(const std::vector<TDescriptor> &A, 
-    const vector<unsigned int> &i_A, const vector<TDescriptor> &B,
-    const vector<unsigned int> &i_B,
-    vector<unsigned int> &i_match_A, vector<unsigned int> &i_match_B) const;
+    const std::vector<unsigned int> &i_A, const std::vector<TDescriptor> &B,
+    const std::vector<unsigned int> &i_B,
+    std::vector<unsigned int> &i_match_A, std::vector<unsigned int> &i_match_B) const;
 
 protected:
 
   /// Database
   // The loop detector stores its own copy of the database
-  TemplatedDatabase<TDescriptor,F> *m_database;
+  DBoW2::TemplatedDatabase<TDescriptor,F> *m_database;
   
   /// KeyPoints of images
   
-  vector< StereoVector<cv::KeyPoint> > m_image_keys;
+  std::vector< StereoVector<cv::KeyPoint> > m_image_keys;
   
   /// Descriptors of images
   
-  vector< StereoVector<TDescriptor> > m_image_descriptors;
+  std::vector< StereoVector<TDescriptor> > m_image_descriptors;
   
   /// Last bow vector added to database
-  BowVector m_last_bowvec;
+  DBoW2::BowVector m_last_bowvec;
   
   /// Temporal consistency window
   tTemporalWindow m_window;
@@ -608,10 +603,10 @@ TemplatedLoopDetector<TDescriptor,F>::TemplatedLoopDetector
 
 template<class TDescriptor, class F>
 TemplatedLoopDetector<TDescriptor,F>::TemplatedLoopDetector
-  (const TemplatedVocabulary<TDescriptor, F> &voc, const Parameters &params)
+  (const DBoW2::TemplatedVocabulary<TDescriptor, F> &voc, const Parameters &params)
   : m_params(params) 
 {
-  m_database = new TemplatedDatabase<TDescriptor, F>(voc, 
+  m_database = new DBoW2::TemplatedDatabase<TDescriptor, F>(voc, 
     params.geom_check == GEOM_DI, params.di_levels);
   
   m_fsolver.setImageSize(params.image_cols, params.image_rows);
@@ -621,10 +616,10 @@ TemplatedLoopDetector<TDescriptor,F>::TemplatedLoopDetector
 
 template<class TDescriptor, class F>
 void TemplatedLoopDetector<TDescriptor,F>::setVocabulary
-  (const TemplatedVocabulary<TDescriptor, F>& voc)
+  (const DBoW2::TemplatedVocabulary<TDescriptor, F>& voc)
 {
   delete m_database;
-  m_database = new TemplatedDatabase<TDescriptor, F>(voc, 
+  m_database = new DBoW2::TemplatedDatabase<TDescriptor, F>(voc, 
     m_params.geom_check == GEOM_DI, m_params.di_levels);
 }
 
@@ -632,10 +627,10 @@ void TemplatedLoopDetector<TDescriptor,F>::setVocabulary
 
 template<class TDescriptor, class F>
 TemplatedLoopDetector<TDescriptor, F>::TemplatedLoopDetector
-  (const TemplatedDatabase<TDescriptor, F> &db, const Parameters &params)
+  (const DBoW2::TemplatedDatabase<TDescriptor, F> &db, const Parameters &params)
   : m_params(params)
 {
-  m_database = new TemplatedDatabase<TDescriptor, F>(db.getVocabulary(),
+  m_database = new DBoW2::TemplatedDatabase<TDescriptor, F>(db.getVocabulary(),
     params.geom_check == GEOM_DI, params.di_levels);
   
   m_fsolver.setImageSize(params.image_cols, params.image_rows);
@@ -704,7 +699,7 @@ void TemplatedLoopDetector<TDescriptor,F>::allocate
 // --------------------------------------------------------------------------
 
 template<class TDescriptor, class F>
-inline const TemplatedDatabase<TDescriptor, F>& 
+inline const DBoW2::TemplatedDatabase<TDescriptor, F>& 
 TemplatedLoopDetector<TDescriptor, F>::getDatabase() const
 {
   return *m_database;
@@ -713,7 +708,7 @@ TemplatedLoopDetector<TDescriptor, F>::getDatabase() const
 // --------------------------------------------------------------------------
 
 template<class TDescriptor, class F>
-inline const TemplatedVocabulary<TDescriptor, F>& 
+inline const DBoW2::TemplatedVocabulary<TDescriptor, F>& 
 TemplatedLoopDetector<TDescriptor, F>::getVocabulary() const
 {
   return m_database->getVocabulary();
@@ -726,11 +721,11 @@ bool TemplatedLoopDetector<TDescriptor, F>::detectLoop
                   (const std::vector<cv::KeyPoint> &keys, const std::vector<TDescriptor> &descriptors, DetectionResult &match,
                   const std::vector<cv::KeyPoint> &keys_right, const std::vector<TDescriptor> &descriptors_right )
 {
-  EntryId entry_id = m_database->size();
+  DBoW2::EntryId entry_id = m_database->size();
   match.query = entry_id;
   
-  BowVector bowvec;
-  FeatureVector featvec;
+  DBoW2::BowVector bowvec;
+  DBoW2::FeatureVector featvec;
   
   if(m_params.geom_check == GEOM_DI)
     m_database->getVocabulary()->transform(descriptors, bowvec, featvec,
@@ -748,7 +743,7 @@ bool TemplatedLoopDetector<TDescriptor, F>::detectLoop
   {
     int max_id = (int)entry_id - m_params.dislocal;
     
-    QueryResults qret;
+    DBoW2::QueryResults qret;
     m_database->query(bowvec, qret, m_params.max_db_results, max_id);
 
     // update database
@@ -780,7 +775,7 @@ bool TemplatedLoopDetector<TDescriptor, F>::detectLoop
           match.match = qret[0].Id;
           
           // compute islands
-          vector<tIsland> islands;
+          std::vector<tIsland> islands;
           computeIslands(qret, islands); 
           // this modifies qret and changes the score order
           
@@ -920,7 +915,7 @@ inline void TemplatedLoopDetector<TDescriptor, F>::clear()
 
 template<class TDescriptor, class F>
 void TemplatedLoopDetector<TDescriptor, F>::computeIslands
-  (QueryResults &q, vector<tIsland> &islands) const
+  (DBoW2::QueryResults &q, std::vector<tIsland> &islands) const
 {
   islands.clear();
   
@@ -933,10 +928,10 @@ void TemplatedLoopDetector<TDescriptor, F>::computeIslands
   else if(!q.empty())
   {
     // sort query results in ascending order of ids
-    std::sort(q.begin(), q.end(), Result::ltId);
+    std::sort(q.begin(), q.end(), DBoW2::Result::ltId);
     
     // create long enough islands
-    QueryResults::const_iterator dit = q.begin();
+    DBoW2::QueryResults::const_iterator dit = q.begin();
     int first_island_entry = dit->Id;
     int last_island_entry = dit->Id;
     
@@ -945,7 +940,7 @@ void TemplatedLoopDetector<TDescriptor, F>::computeIslands
     unsigned int i_last = 0;
     
     double best_score = dit->Score;
-    EntryId best_entry = dit->Id;
+    DBoW2::EntryId best_entry = dit->Id;
 
     ++dit;
     for(unsigned int idx = 1; dit != q.end(); ++dit, ++idx)
@@ -999,7 +994,7 @@ void TemplatedLoopDetector<TDescriptor, F>::computeIslands
 
 template<class TDescriptor, class F>
 double TemplatedLoopDetector<TDescriptor, F>::calculateIslandScore(
-  const QueryResults &q, unsigned int i_first, unsigned int i_last) const
+  const DBoW2::QueryResults &q, unsigned int i_first, unsigned int i_last) const
 {
   // get the sum of the scores
   double sum = 0;
@@ -1011,7 +1006,7 @@ double TemplatedLoopDetector<TDescriptor, F>::calculateIslandScore(
 
 template<class TDescriptor, class F>
 void TemplatedLoopDetector<TDescriptor, F>::updateTemporalWindow
-  (const tIsland &matched_island, EntryId entry_id)
+  (const tIsland &matched_island, DBoW2::EntryId entry_id)
 {
   // if m_window.nentries > 0, island > m_window.last_matched_island and
   // entry_id > m_window.last_query_id hold
@@ -1023,10 +1018,10 @@ void TemplatedLoopDetector<TDescriptor, F>::updateTemporalWindow
   }
   else
   {
-    EntryId a1 = m_window.last_matched_island.first;
-    EntryId a2 = m_window.last_matched_island.last;
-    EntryId b1 = matched_island.first;
-    EntryId b2 = matched_island.last;
+    DBoW2::EntryId a1 = m_window.last_matched_island.first;
+    DBoW2::EntryId a2 = m_window.last_matched_island.last;
+    DBoW2::EntryId b1 = matched_island.first;
+    DBoW2::EntryId b2 = matched_island.last;
     
     bool fit = (b1 <= a1 && a1 <= b2) || (a1 <= b1 && b1 <= a2);
 
@@ -1051,19 +1046,19 @@ void TemplatedLoopDetector<TDescriptor, F>::updateTemporalWindow
 
 template<class TDescriptor, class F>
 bool TemplatedLoopDetector<TDescriptor, F>::isGeometricallyConsistent_DI(
-  EntryId old_entry, const std::vector<cv::KeyPoint> &keys, 
+  DBoW2::EntryId old_entry, const std::vector<cv::KeyPoint> &keys, 
   const std::vector<TDescriptor> &descriptors, 
-  const FeatureVector &bowvec) const
+  const DBoW2::FeatureVector &bowvec) const
 {
-  const FeatureVector &oldvec = m_database->retrieveFeatures(old_entry);
+  const DBoW2::FeatureVector &oldvec = m_database->retrieveFeatures(old_entry);
   
   // for each word in common, get the closest descriptors
   
-  vector<unsigned int> i_old, i_cur;
+  std::vector<unsigned int> i_old, i_cur;
   
-  FeatureVector::const_iterator old_it, cur_it; 
-  const FeatureVector::const_iterator old_end = oldvec.end();
-  const FeatureVector::const_iterator cur_end = bowvec.end();
+  DBoW2::FeatureVector::const_iterator old_it, cur_it; 
+  const DBoW2::FeatureVector::const_iterator old_end = oldvec.end();
+  const DBoW2::FeatureVector::const_iterator cur_end = bowvec.end();
   
   old_it = oldvec.begin();
   cur_it = bowvec.begin();
@@ -1075,7 +1070,7 @@ bool TemplatedLoopDetector<TDescriptor, F>::isGeometricallyConsistent_DI(
       // compute matches between 
       // features old_it->second of m_image_keys[old_entry] and
       // features cur_it->second of keys
-      vector<unsigned int> i_old_now, i_cur_now;
+      std::vector<unsigned int> i_old_now, i_cur_now;
       
       getMatches_neighratio(
         m_image_descriptors[old_entry].main, old_it->second, 
@@ -1106,10 +1101,10 @@ bool TemplatedLoopDetector<TDescriptor, F>::isGeometricallyConsistent_DI(
   // calculate now the fundamental matrix
   if((int)i_old.size() >= m_params.min_Fpoints)
   {
-    vector<cv::Point2f> old_points, cur_points;
+    std::vector<cv::Point2f> old_points, cur_points;
     
     // add matches to the vectors to calculate the fundamental matrix
-    vector<unsigned int>::const_iterator oit, cit;
+    std::vector<unsigned int>::const_iterator oit, cit;
     oit = i_old.begin();
     cit = i_cur.begin();
     
@@ -1143,8 +1138,8 @@ isGeometricallyConsistent_Exhaustive(
   const std::vector<cv::KeyPoint> &cur_keys,
   const std::vector<TDescriptor> &cur_descriptors) const
 {
-  vector<unsigned int> i_old, i_cur;
-  vector<unsigned int> i_all_old, i_all_cur;
+  std::vector<unsigned int> i_old, i_cur;
+  std::vector<unsigned int> i_all_old, i_all_cur;
   
   i_all_old.reserve(old_keys.size());
   i_all_cur.reserve(cur_keys.size());
@@ -1165,11 +1160,11 @@ isGeometricallyConsistent_Exhaustive(
   if((int)i_old.size() >= m_params.min_Fpoints)
   {
     // add matches to the vectors to calculate the fundamental matrix
-    vector<unsigned int>::const_iterator oit, cit;
+    std::vector<unsigned int>::const_iterator oit, cit;
     oit = i_old.begin();
     cit = i_cur.begin();
     
-    vector<cv::Point2f> old_points, cur_points;
+    std::vector<cv::Point2f> old_points, cur_points;
     old_points.reserve(i_old.size());
     cur_points.reserve(i_cur.size());
     
@@ -1200,7 +1195,7 @@ void TemplatedLoopDetector<TDescriptor, F>::getFlannStructure(
   const std::vector<TDescriptor> &descriptors, 
   cv::FlannBasedMatcher &flann_structure) const
 {
-  vector<cv::Mat> features(1);
+  std::vector<cv::Mat> features(1);
   F::toMat32F(descriptors, features[0]);
   
   flann_structure.clear();
@@ -1212,21 +1207,21 @@ void TemplatedLoopDetector<TDescriptor, F>::getFlannStructure(
 
 template<class TDescriptor, class F>
 bool TemplatedLoopDetector<TDescriptor, F>::isGeometricallyConsistent_Flann
-  (EntryId old_entry,
+  (DBoW2::EntryId old_entry,
   const std::vector<cv::KeyPoint> &keys, 
   const std::vector<TDescriptor> &descriptors,
   cv::FlannBasedMatcher &flann_structure) const
 {
-  vector<unsigned int> i_old, i_cur; // indices of correspondences
+  std::vector<unsigned int> i_old, i_cur; // indices of correspondences
   
-  const vector<cv::KeyPoint>& old_keys = m_image_keys[old_entry].main;
-  const vector<TDescriptor>& old_descs = m_image_descriptors[old_entry].main;
-  const vector<cv::KeyPoint>& cur_keys = keys;
+  const std::vector<cv::KeyPoint>& old_keys = m_image_keys[old_entry].main;
+  const std::vector<TDescriptor>& old_descs = m_image_descriptors[old_entry].main;
+  const std::vector<cv::KeyPoint>& cur_keys = keys;
   
-  vector<cv::Mat> queryDescs_v(1);
+  std::vector<cv::Mat> queryDescs_v(1);
   F::toMat32F(old_descs, queryDescs_v[0]);
   
-  vector<vector<cv::DMatch> > matches;
+  std::vector<std::vector<cv::DMatch> > matches;
   
   flann_structure.knnMatch(queryDescs_v[0], matches, 2);
   
@@ -1246,7 +1241,7 @@ bool TemplatedLoopDetector<TDescriptor, F>::isGeometricallyConsistent_Flann
       
       if(ok)
       {
-        vector<unsigned int>::iterator cit =
+        std::vector<unsigned int>::iterator cit =
           std::find(i_cur.begin(), i_cur.end(), cur_idx);
         
         if(cit == i_cur.end())
@@ -1269,11 +1264,11 @@ bool TemplatedLoopDetector<TDescriptor, F>::isGeometricallyConsistent_Flann
   if((int)i_old.size() >= m_params.min_Fpoints)
   {
     // add matches to the vectors for calculating the fundamental matrix
-    vector<unsigned int>::const_iterator oit, cit;
+    std::vector<unsigned int>::const_iterator oit, cit;
     oit = i_old.begin();
     cit = i_cur.begin();
     
-    vector<cv::Point2f> old_points, cur_points;
+    std::vector<cv::Point2f> old_points, cur_points;
     old_points.reserve(i_old.size());
     cur_points.reserve(i_cur.size());
     
@@ -1301,16 +1296,16 @@ bool TemplatedLoopDetector<TDescriptor, F>::isGeometricallyConsistent_Flann
 
 template<class TDescriptor, class F>
 void TemplatedLoopDetector<TDescriptor, F>::getMatches_neighratio(
-  const vector<TDescriptor> &A, const vector<unsigned int> &i_A,
-  const vector<TDescriptor> &B, const vector<unsigned int> &i_B,
-  vector<unsigned int> &i_match_A, vector<unsigned int> &i_match_B) const 
+  const std::vector<TDescriptor> &A, const std::vector<unsigned int> &i_A,
+  const std::vector<TDescriptor> &B, const std::vector<unsigned int> &i_B,
+  std::vector<unsigned int> &i_match_A, std::vector<unsigned int> &i_match_B) const 
 {
   i_match_A.resize(0);
   i_match_B.resize(0);
-  i_match_A.reserve( min(i_A.size(), i_B.size()) );
-  i_match_B.reserve( min(i_A.size(), i_B.size()) );
+  i_match_A.reserve( std::min(i_A.size(), i_B.size()) );
+  i_match_B.reserve( std::min(i_A.size(), i_B.size()) );
   
-  vector<unsigned int>::const_iterator ait, bit;
+  std::vector<unsigned int>::const_iterator ait, bit;
   unsigned int i, j;
   i = 0;
   for(ait = i_A.begin(); ait != i_A.end(); ++ait, ++i)
@@ -1364,16 +1359,16 @@ void TemplatedLoopDetector<TDescriptor, F>::getMatches_neighratio(
 // --------------------------------------------------------------------------
 
 template<class TDescriptor, class F>
-void TemplatedLoopDetector<TDescriptor, F>::removeLowScores(QueryResults &q,
+void TemplatedLoopDetector<TDescriptor, F>::removeLowScores(DBoW2::QueryResults &q,
   double threshold) const
 {
   // remember scores in q are in descending order now
   //QueryResults::iterator qit = 
-  //  lower_bound(q.begin(), q.end(), threshold, Result::geqv);
+  //  lower_bound(q.begin(), q.end(), threshold, DBoW2::Result::geqv);
   
-  Result aux(0, threshold);
-  QueryResults::iterator qit = 
-    lower_bound(q.begin(), q.end(), aux, Result::geq);
+  DBoW2::Result aux(0, threshold);
+  DBoW2::QueryResults::iterator qit = 
+    lower_bound(q.begin(), q.end(), aux, DBoW2::Result::geq);
   
   // qit = first element < m_alpha_minus || end
   

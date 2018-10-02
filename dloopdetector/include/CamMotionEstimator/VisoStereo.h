@@ -83,7 +83,13 @@ public:
 
 	std::vector<int> getInlier() { return getInlier(tr_delta_vec); };
 	
-	Eigen::Matrix<double,4,4> getMotion() { return Tr_delta; }
+	// Transform to obtain 3D point coordinate w.r.t. the current camera frame (change of frame, from the previous frame)
+	// Equivalent to an active motion from current frame to previous frame
+	Eigen::Matrix<double,4,4> getMotion() { return Tr_delta; } 
+
+	// Motion of camera w.r.t. previous camera frame (active motion)
+	// The matrix Tr_delta.inverse() can be interpreted as the attitude of current frame w.r.t. previous frame 
+	Eigen::Matrix<double,4,4> getCameraMotion() { return Tr_delta.inverse(); } 
 
     // deconstructor
 	~VisualOdometryStereo() {}
@@ -129,7 +135,7 @@ private:
     std::vector<int> inliers;
 
 	std::vector<double> tr_delta_vec;
-	Eigen::Matrix<double,4,4> Tr_delta;
+	Eigen::Matrix<double,4,4> Tr_delta; // This stores the change of frame transformation from previous frame to current frame
 };
 
 
@@ -154,14 +160,14 @@ void VisualOdometryStereo::pushBackData(
 
 	// Sanity checks
 	// The matched index amount should be smaller / equal to available points
-	assert(matches_quad_vec.size() <= min( keyr1_vec.size() ,  keyr2_vec.size() ));
+	assert(matches_quad_vec.size() <= std::min( keyr1_vec.size() ,  keyr2_vec.size() ));
 	
 }
 
 bool VisualOdometryStereo::updateMotion () {
   
   // estimate motion
-  vector<double> tr_delta = estimateMotion();
+  std::vector<double> tr_delta = estimateMotion();
   tr_delta_vec.clear();
   
   // on failure
@@ -181,12 +187,20 @@ bool VisualOdometryStereo::updateMotion () {
 //// Implementation of Private Member Functions
 /////////////////////////////////////////////////////////////////////////////////
 
-vector<double> VisualOdometryStereo::estimateMotion()
+std::vector<double> VisualOdometryStereo::estimateMotion()
 {
 
 	// compute minimum distance for RANSAC samples
 	float width_max = 0, height_max = 0;
 	float width_min = 1e5, height_min = 1e5;
+
+	// Sanity check for number of matches
+	const int N = matches_quad_vec->size();
+    if (N < 10)
+    {
+        std::cerr << "Total poll of matches is too small, aborting viso: " << N << std::endl;
+        return std::vector<double>();
+    }
 
 
     // with reference to previous left frame
@@ -202,22 +216,15 @@ vector<double> VisualOdometryStereo::estimateMotion()
 	}
 
 	// Defined the min-dist between any random 3 matches
-	float min_dist = min(width_max-width_min, height_max-height_min) / 3.f;	// default divided by 3.0
+	float min_dist = std::min(width_max-width_min, height_max-height_min) / 3.f;	// default divided by 3.0
 
     if ( min_dist < param.image_height / 10.f && min_dist < param.image_width / 10.f  )
     {
         std::cerr << "min_dist is too small (< 0.1*image_dimensions), aborting viso: " << min_dist << std::endl;
-        return vector<double>();
+        return std::vector<double>();
     }
 
     min_dist = min_dist*min_dist;
-
-    const int N = matches_quad_vec->size();
-    if (N < 10)
-    {
-        std::cerr << "Total poll of matches is too small: " << N << std::endl;
-        return vector<double>();
-    }
 
 	// clear vectors
 	inliers.clear();
@@ -236,17 +243,17 @@ vector<double> VisualOdometryStereo::estimateMotion()
 
 	// project matches of previous image into 3d
 
-	for (int i = 0; i < (*matches_quad_vec).size() ; i++ )
+	for (size_t i = 0; i < (*matches_quad_vec).size() ; i++ )
 	{
-		const cv::KeyPoint keyl1 = (*keyl1_vec)[ (*matches_quad_vec)[i][L1] ];
-		const cv::KeyPoint keyr1 = (*keyr1_vec)[ (*matches_quad_vec)[i][R1] ];
+		const cv::KeyPoint &keyl1 = (*keyl1_vec)[ (*matches_quad_vec)[i][L1] ];
+		const cv::KeyPoint &keyr1 = (*keyr1_vec)[ (*matches_quad_vec)[i][R1] ];
 
 		if ( keyl1.pt.x - keyr1.pt.x < 0.0 )
 		{
 			std::cerr << "Warning: Flipped match at " << i << std::endl;
 		}
 
-		double d = max( keyl1.pt.x - keyr1.pt.x, 0.0001f);			// d = xl - xr
+		double d = std::max( keyl1.pt.x - keyr1.pt.x, 0.0001f);			// d = xl - xr
 		X[i] = (keyl1.pt.x - _cu) * param.base / d;				// X = (u1p - calib.cu)*baseline/d
 		Y[i] = (keyl1.pt.y - _cv) * param.base / d;				// Y = (v1p - calib.cv)*baseline/d
 		Z[i] = _f * param.base / d;									// Z = f*baseline/d
@@ -293,10 +300,10 @@ vector<double> VisualOdometryStereo::estimateMotion()
 			if (d0 >= min_dist && d1 >= min_dist && d2 >= min_dist)
 				break;
 
-			if (selection_iter >= 100)
+			if (selection_iter >= 20)
             {
-                std::cerr << "Finding RANSAC 3 matches not possible..." << std::endl;
-                return vector<double>();
+                std::cerr << "Finding RANSAC 3 matches > min_dist not possible..." << std::endl;
+                // return vector<double>();
             }
 		}
 
@@ -389,12 +396,12 @@ vector<double> VisualOdometryStereo::estimateMotion()
 	if ( inliers.size() / (double)N < 0.5 )
 	{
 		std::cout << "ERROR: Inlier % too small! Return false." << std::endl;
-		return vector<double>();
+		return std::vector<double>();
 	}
 
 	std::cout << "Pre-Refinement TR vector: ";
 	for (int i=0;i<6;i++)
-		cout << tr_delta[i] << ", ";
+		std::cout << tr_delta[i] << ", ";
 	std::cout << std::endl;
 	
 	assert (tr_delta.size() == 6);
@@ -407,26 +414,30 @@ vector<double> VisualOdometryStereo::estimateMotion()
 		result = updateParameters(inliers, tr_delta, 1, 1e-8);
 		if (result == CONVERGED)
 			break;
-		if (iter++ > 100)
+		if (iter++ > 20)
+		{
+			std::cerr << "Final Refinement step exceeds 20!" << std::endl;
 			break;
+		}
+			
 	}
 
 	if (result == FAILED)
 	{
-		cerr << "WARNING refinement step -> updateParameters FAILED" << endl;
-		return vector<double>();
+		std::cerr << "WARNING refinement step -> updateParameters FAILED" << std::endl;
+		return std::vector<double>();
 	}
 
 	// not converged
 	if (result == UPDATED)
 	{
-		cerr << "WARNING refinement step -> updateParameters NOT converged" << endl;
-		return vector<double>();
+		std::cerr << "WARNING refinement step -> updateParameters NOT converged" << std::endl;
+		return std::vector<double>();
 	}
 
 	std::cout << "Post-Refinement TR vector: ";
 	for (int i=0;i<6;i++)
-		cout << tr_delta[i] << ", ";
+		std::cout << tr_delta[i] << ", ";
 	std::cout << std::endl;
 	
 	return tr_delta;
@@ -435,7 +446,7 @@ vector<double> VisualOdometryStereo::estimateMotion()
 void VisualOdometryStereo::computeObservations(const std::vector<int> &active, bool inlier_mode ) {
 
 
-    for (int i=0 ; i < active.size() || (inlier_mode && i < matches_quad_vec->size() ) ; i++)
+    for (size_t i=0 ; i < active.size() || (inlier_mode && i < matches_quad_vec->size() ) ; i++)
     {
         int idx_l2 = (*matches_quad_vec)[ (inlier_mode ? i : active[i]) ][L2];
         int idx_r2 = (*matches_quad_vec)[ (inlier_mode ? i : active[i]) ][R2];
@@ -469,14 +480,14 @@ VisualOdometryStereo::result VisualOdometryStereo::updateParameters(std::vector<
 		for (int n = 0; n < 6; n++)
 		{
 			double a = 0;
-			for (int i = 0; i < 4 * active.size(); i++)
+			for (size_t i = 0; i < 4 * active.size(); i++)
 			{
 				a += J[i * 6 + m] * J[i * 6 + n];
 			}
 			A(m,n) = a;
 		}
 		double b = 0;
-		for (int i = 0; i < 4 * active.size(); i++)
+		for (size_t i = 0; i < 4 * active.size(); i++)
 		{
 			b += J[i * 6 + m] * (p_residual[i]);
 		}
@@ -487,6 +498,7 @@ VisualOdometryStereo::result VisualOdometryStereo::updateParameters(std::vector<
 
     Eigen::Matrix<double,6,1> x;
 
+	// Other possibilities: https://eigen.tuxfamily.org/dox/group__TutorialLinearAlgebra.html
     x = A.colPivHouseholderQr().solve(B);
 	if ( B.isApprox(A*x,1e-2)) // Precision of isApprox
 	{
@@ -547,7 +559,7 @@ std::vector<int> VisualOdometryStereo::getRandomSample (int N,int num) {
     return result;
 }
 
-std::vector<int> VisualOdometryStereo::getInlier(vector<double> &tr)
+std::vector<int> VisualOdometryStereo::getInlier(std::vector<double> &tr)
 {
 
 	// mark all observations active, empty
@@ -560,7 +572,7 @@ std::vector<int> VisualOdometryStereo::getInlier(vector<double> &tr)
 	// compute inliers
     double threshold = param.inlier_threshold * param.inlier_threshold;
 	std::vector<int> inliers;
-	for (int i = 0; i < matches_quad_vec->size() ; i++)
+	for (size_t i = 0; i < matches_quad_vec->size() ; i++)
     {
 		double sq0 = p_residual[4 * i + 0] * p_residual[4 * i + 0];
 		double sq1 = p_residual[4 * i + 1] * p_residual[4 * i + 1];
@@ -584,20 +596,21 @@ std::vector<int> VisualOdometryStereo::getInlier(vector<double> &tr)
 void VisualOdometryStereo::computeResidualsAndJacobian(const std::vector<double> &tr, const std::vector<int> &active, bool inlier_mode)
 {
 
-    double &_cu = param.calib.cu;
-    double &_cv = param.calib.cv;
-    double &_f = param.calib.f;
+    const double &_cu = param.calib.cu;
+    const double &_cv = param.calib.cv;
+    const double &_f = param.calib.f;
     
 	// extract motion parameters
-	double rx = tr[0]; double ry = tr[1]; double rz = tr[2];
-	double tx = tr[3]; double ty = tr[4]; double tz = tr[5];
+	const double &rx = tr[0]; const double &ry = tr[1]; const double &rz = tr[2];
+	const double &tx = tr[3]; const double &ty = tr[4]; const double &tz = tr[5];
 
 	// precompute sine/cosine
-	double sx = std::sin(rx); double cx = std::cos(rx); double sy = std::sin(ry);     // rx = alpha, ry = beta, rz = gamma
-	double cy = std::cos(ry); double sz = std::sin(rz); double cz = std::cos(rz);
+	const double sx = std::sin(rx); const double cx = std::cos(rx); const double sy = std::sin(ry);     // rx = alpha, ry = beta, rz = gamma
+	const double cy = std::cos(ry); const double sz = std::sin(rz); const double cz = std::cos(rz);
 
 	// compute rotation matrix and derivatives
 	// rotation matrix = Rz*Ry*Rx
+	// hm: reference http://www.songho.ca/opengl/gl_anglestoaxes.html (Rx*Ry*Rz)
 	double r00 = +cy*cz;          double r01 = -cy*sz;          double r02 = +sy;
 	double r10 = +sx*sy*cz + cx*sz; double r11 = -sx*sy*sz + cx*cz; double r12 = -sx*cy;
 	double r20 = -cx*sy*cz + sx*sz; double r21 = +cx*sy*sz + sx*cz; double r22 = +cx*cy;
@@ -615,7 +628,7 @@ void VisualOdometryStereo::computeResidualsAndJacobian(const std::vector<double>
 	double X1cd, Y1cd, Z1cd;
 
 	// for all observations do
-	for (int i = 0; i < active.size() || (inlier_mode && i < matches_quad_vec->size() ); i++)
+	for (size_t i = 0; i < active.size() || (inlier_mode && i < matches_quad_vec->size() ); i++)
 	{
 
 		// get 3d point in previous coordinate system
@@ -690,20 +703,20 @@ void VisualOdometryStereo::computeResidualsAndJacobian(const std::vector<double>
 Eigen::Matrix<double,4,4> VisualOdometryStereo::transformationVectorToMatrix( const std::vector<double> &tr ) {
 
   // extract parameters
-  double rx = tr[0];
-  double ry = tr[1];
-  double rz = tr[2];
-  double tx = tr[3];
-  double ty = tr[4];
-  double tz = tr[5];
+  const double &rx = tr[0];
+  const double &ry = tr[1];
+  const double &rz = tr[2];
+  const double &tx = tr[3];
+  const double &ty = tr[4];
+  const double &tz = tr[5];
 
   // precompute sine/cosine
-  double sx = sin(rx);
-  double cx = cos(rx);
-  double sy = sin(ry);
-  double cy = cos(ry);
-  double sz = sin(rz);
-  double cz = cos(rz);
+  const double sx = sin(rx);
+  const double cx = cos(rx);
+  const double sy = sin(ry);
+  const double cy = cos(ry);
+  const double sz = sin(rz);
+  const double cz = cos(rz);
 
   // compute transformation
   Eigen::Matrix<double,4,4> Tr;

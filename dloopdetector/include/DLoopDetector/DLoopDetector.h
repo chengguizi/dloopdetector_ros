@@ -68,11 +68,11 @@ namespace DLoopDetector
 
 /// SURF64 Loop Detector
 typedef DLoopDetector::TemplatedLoopDetector
-  <FSurf64::TDescriptor, FSurf64> Surf64LoopDetector;
+  <DBoW2::FSurf64::TDescriptor, DBoW2::FSurf64> Surf64LoopDetector;
 
 /// BRIEF Loop Detector
 typedef DLoopDetector::TemplatedLoopDetector
-  <FBrief::TDescriptor, FBrief> BriefLoopDetector;
+  <DBoW2::FBrief::TDescriptor, DBoW2::FBrief> BriefLoopDetector;
 
 #endif
 

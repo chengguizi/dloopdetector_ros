@@ -41,6 +41,7 @@
   <build_depend>cv_bridge</build_depend>
   <build_depend>image_geometry</build_depend> 
   <build_depend>dbow2</build_depend>
+  <build_depend>dlib_ros</build_depend>
   <exec_depend>roscpp</exec_depend>
   <exec_depend>std_msgs</exec_depend>
   <exec_depend>sensor_msgs</exec_depend>
@@ -49,5 +50,6 @@
   <exec_depend>cv_bridge</exec_depend>
   <exec_depend>image_geometry</exec_depend> 
   <exec_depend>dbow2</exec_depend>
+  <exec_depend>dlib_ros</exec_depend>
 
 </package>
