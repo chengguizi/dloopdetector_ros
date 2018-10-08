@@ -33,6 +33,7 @@ find_package(catkin REQUIRED COMPONENTS
 
   dbow2
   dlib_ros
+  libviso2_eigen
 )
 
 # set(DEPENDENCY_DIR ${CMAKE_BINARY_DIR}/dependencies)
@@ -45,7 +46,7 @@ catkin_package(
 	# INCLUDE_DIRS
 	# LIBRARIES
 	# CATKIN_DEPENDS
-	DEPENDS DBoW2 OpenCV EIGEN3 #  DLib this is just for checking purposes
+	# DEPENDS DBoW2 OpenCV EIGEN3 #  DLib this is just for checking purposes
     )
     
 
@@ -59,7 +60,6 @@ if(BUILD_DemoBRIEF)
     include 
     ${EIGEN3_INCLUDE_DIRS}
     ${DBoW2_INCLUDE_DIRS} 
-    ${DLib_INCLUDE_DIRS}
     ${catkin_INCLUDE_DIRS}
     ${CATKIN_DEVEL_PREFIX}/../../include # to fix bug that include folder doesnt exist at configure time
   )
@@ -67,7 +67,6 @@ if(BUILD_DemoBRIEF)
   target_link_libraries(demo_brief_stereo PRIVATE 
     ${OpenCV_LIBS} 
     ${DBoW2_LIBS} 
-    ${DLib_LIBS} 
     ${catkin_LIBRARIES}
   )
 endif(BUILD_DemoBRIEF)

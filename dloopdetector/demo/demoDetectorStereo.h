@@ -37,11 +37,9 @@
 
 #include <cv_bridge/cv_bridge.h>
 
-// Cam Motion Estimation
-#include <CamMotionEstimator/CamMotionEstimator.h>
-
-// TR Estimation from Quad Matches
-#include <CamMotionEstimator/VisoStereo.h>
+// Quad Matching & Cam Motion Estimation
+#include <viso2_eigen/quad_matcher.h>
+#include <viso2_eigen/stereo_motion_estimator.h>
 
 using namespace DLoopDetector;
 
@@ -80,8 +78,7 @@ public:
 	 * @param width image width
 	 * @param height image height
 	 */
-	demoDetector(const std::string &vocfile, const std::string &imagedir,
-		const std::string &posefile, int width, int height);
+	demoDetector(const std::string &vocfile, int width, int height);
 		
 	~demoDetector(){}
 
@@ -107,8 +104,6 @@ protected:
 protected:
 
 	std::string m_vocfile;
-	std::string m_imagedir;
-	std::string m_posefile;
 	int m_width;
 	int m_height;
 	FeatureExtractor<TDescriptor> *extractor_;
@@ -149,9 +144,8 @@ protected:
 
 template<class TVocabulary, class TDetector, class TFeature>
 demoDetector<TVocabulary, TDetector, TFeature>::demoDetector
-	(const std::string &vocfile, const std::string &imagedir,
-	const std::string &posefile, int width, int height)
-	: m_vocfile(vocfile), m_imagedir(imagedir), m_posefile(posefile),
+	(const std::string &vocfile, int width, int height)
+	: m_vocfile(vocfile),
 		m_width(width), m_height(height), exact_sync_(ExactPolicy(3), left_sub_, right_sub_, left_info_sub_, right_info_sub_), all_received_(0)
 {}
 
@@ -161,9 +155,7 @@ template<class TVocabulary, class TDetector, class TFeature>
 void demoDetector<TVocabulary, TDetector, TFeature>::run
 	(const std::string &name, const FeatureExtractor<TDescriptor> &extractor)
 {
-	std::cout << "DLoopDetector Demo - Modified by Cheng Huimin" << std::endl 
-		<< "Dorian Galvez-Lopez" << std::endl
-		<< "http://doriangalvez.com" << std::endl << std::endl;
+	std::cout << "======= DLoopDetector Demo - Modified by Cheng Huimin ===========" << std::endl;
 	
 	// Set loop detector parameters
 	typename TDetector::Parameters params(m_height, m_width);
@@ -280,8 +272,8 @@ void demoDetector<TVocabulary, TDetector, TFeature>::run
 	int db_size = 0;
 
 	
-	CamMotionEstimator<TDescriptor, TFeature> camMotionEstimator;
-	VisualOdometryStereo viso;
+	QuadMatcher<TDescriptor, TFeature> qm;
+	StereoMotionEstimator sme;
 
 	// go
 	while(true)
@@ -304,41 +296,43 @@ void demoDetector<TVocabulary, TDetector, TFeature>::run
 		std::cout << "Adding image " << db_size << std::endl;
 
 		// Retrive images from ROS
-		// uint8_t *l_image_data, r_image_data;
-		cv_bridge::CvImageConstPtr l_cv_ptr, r_cv_ptr;
-		l_cv_ptr = cv_bridge::toCvShare(l_image_msg_, sensor_msgs::image_encodings::MONO8);
-		r_cv_ptr = cv_bridge::toCvShare(r_image_msg_, sensor_msgs::image_encodings::MONO8);
+		auto cvImage_l = cv_bridge::toCvShare(l_image_msg_, sensor_msgs::image_encodings::MONO8);
+		auto cvImage_r = cv_bridge::toCvShare(r_image_msg_, sensor_msgs::image_encodings::MONO8);
 
 		ROS_ASSERT( m_width == (int)l_image_msg_->width && m_height == (int)l_image_msg_->height);
-		cv::Mat im(cv::Size(m_width, m_height), CV_8UC1, (void *)l_cv_ptr->image.data, cv::Mat::AUTO_STEP);
-		cv::Mat im_right(cv::Size(m_width, m_height), CV_8UC1, (void *)r_cv_ptr->image.data, cv::Mat::AUTO_STEP);
+		cv::Mat im = cvImage_l->image;
+		cv::Mat im_right = cvImage_r->image;
 
 		if (db_size == 0) // yet to initlaise
 		{
 			image_geometry::StereoCameraModel model;
 			model.fromCameraInfo(*l_info_msg_, *r_info_msg_);
 
-			VisualOdometryStereo::Parameters viso_param;
+			StereoMotionEstimatorParam::Parameters sme_param;
+			
+			sme_param.ransac_iters = 400;
+			sme_param.reweighting = false;
+			sme_param.inlier_threshold = 4.0;
+			sme_param.inlier_ratio_min = 0.3;
+			sme_param.image_width = m_width;
+			sme_param.image_height = m_height;
 
-			viso_param.base = model.baseline();
-			viso_param.ransac_iters = 200;
-			viso_param.reweighting = false;
-			viso_param.inlier_threshold = 4;
-			viso_param.image_width = m_width;
-			viso_param.image_height = m_height;
+			sme_param.calib.baseline = model.baseline();
+			sme_param.calib.f = model.left().fx();
+			sme_param.calib.cu = model.left().cx();
+			sme_param.calib.cv = model.left().cy();
 
-			viso_param.calib.f = model.left().fx();
-			viso_param.calib.cu = model.left().cx();
-			viso_param.calib.cv = model.left().cy();
+			sme.setParam(sme_param);
 
-			viso.setParam(viso_param);
+			QuadMatcherParam::Parameters qm_param;
+			qm_param.image_width = m_width;
+			qm_param.image_height = m_height;
+			qm_param.epipolar_tolerance = 10;
+			qm_param.use_bucketing = true;
+			qm_param.max_neighbor_ratio = 0.6;
+			qm_param.compulte_scaled_keys =true;
 
-			typename CamMotionEstimator<TDescriptor, TFeature>::Parameters cme_param;
-			cme_param.image_width = m_width;
-			cme_param.image_height = m_height;
-			cme_param.use_bucketing = true;
-
-			camMotionEstimator.setParam(cme_param);
+			qm.setParam(qm_param);
 		}
 		
 
@@ -369,11 +363,11 @@ void demoDetector<TVocabulary, TDetector, TFeature>::run
 
 			profiler.profile("quadmatch");
 			// l1, l2, r1, r2
-			camMotionEstimator.pushBackData (result.match_keys.main, result.query_keys.main, 
+			qm.pushBackData (result.match_keys.main, result.query_keys.main, 
 											result.match_keys.right, result.query_keys.right, 
 											result.match_descriptors.main, result.query_descriptors.main,
 											result.match_descriptors.right, result.query_descriptors.right);
-			bool match_result = camMotionEstimator.matchFeaturesQuad();
+			bool match_result = qm.matchFeaturesQuad();
 			profiler.stop();
 
 			if (match_result)
@@ -381,17 +375,17 @@ void demoDetector<TVocabulary, TDetector, TFeature>::run
 				profiler.profile("viso");
 				// Obtain matches indices in vectors of 4-element arrays
 				std::vector< std::array<int,4> > matches_quad_vec;
-				camMotionEstimator.getMatchesQuad(matches_quad_vec);
+				qm.getMatchesQuad(matches_quad_vec);
 
 				// previous left --> current left --> current right --> previous right
-				viso.pushBackData(matches_quad_vec, result.match_keys.main, result.query_keys.main,
+				sme.pushBackData(matches_quad_vec, result.match_keys.main, result.query_keys.main,
 					result.query_keys.right, result.match_keys.right);
 
-				bool viso_result = viso.updateMotion();
+				bool viso_result = sme.updateMotion();
 				profiler.stop();
 
 				if (viso_result)
-					std::cout << "TR Estimate" << std::endl << viso.getCameraMotion() << std::endl;
+					std::cout << "TR Estimate" << std::endl << sme.getCameraMotion().matrix() << std::endl;
 				else
 					std::cout << "viso: Error Updating Motion." << std::endl;
 

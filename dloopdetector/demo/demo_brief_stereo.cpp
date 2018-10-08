@@ -24,16 +24,7 @@
 // ROS Integration
 #include <ros/ros.h>
 
-using namespace DLoopDetector;
-
 // ----------------------------------------------------------------------------
-
-// static const char *VOC_FILE = "/home/dhl/git/catkin_ws/resources/brief_k10L6.voc.gz";
-static const char *POSE_FILE="";
-static const char *IMAGE_DIR="";
-// static const int IMAGE_W = 640; // image size
-// static const int IMAGE_H = 480;
-// static const char *BRIEF_PATTERN_FILE = "/home/dhl/git/catkin_ws/resources/brief_pattern.yml";
 
 static const int BRIEF_BIT_LENGTH = 256;
 
@@ -85,7 +76,7 @@ int main(int argc, char **argv)
 
   // prepares the demo
   demoDetector<BriefVocabulary, BriefLoopDetector, DBoW2::FBrief> 
-    demo(VOC_FILE, IMAGE_DIR, POSE_FILE, IMAGE_W, IMAGE_H);
+    demo(VOC_FILE, IMAGE_W, IMAGE_H);
   
   try 
   {
