@@ -26,16 +26,21 @@
 
 // ROS Integration
 #include <ros/ros.h>
+#include <rosbag/bag.h>
+
 #include <sensor_msgs/Image.h>
 #include <sensor_msgs/CameraInfo.h>
 #include <image_geometry/stereo_camera_model.h>
+#include <geometry_msgs/PoseWithCovarianceStamped.h>
 
 #include <message_filters/subscriber.h>
 #include <message_filters/synchronizer.h>
+#include <message_filters/cache.h>
 #include <message_filters/sync_policies/exact_time.h>
 #include <image_transport/subscriber_filter.h>
 
 #include <cv_bridge/cv_bridge.h>
+#include <tf2_eigen/tf2_eigen.h>
 
 // Quad Matching & Cam Motion Estimation
 #include <viso2_eigen/quad_matcher.h>
@@ -109,7 +114,7 @@ protected:
 	FeatureExtractor<TDescriptor> *extractor_;
 	
 
-	// ROS
+	// ROS image sequence subscribe
 
 	image_transport::SubscriberFilter left_sub_;
 	image_transport::SubscriberFilter right_sub_;
@@ -119,11 +124,20 @@ protected:
 	typedef message_filters::Synchronizer<ExactPolicy> ExactSync;
 	ExactSync exact_sync_;
 
-	int all_received_;
+	int all_received_, pose_received_;
 	sensor_msgs::ImageConstPtr l_image_msg_;
 	sensor_msgs::ImageConstPtr r_image_msg_;
 	sensor_msgs::CameraInfoConstPtr l_info_msg_;
 	sensor_msgs::CameraInfoConstPtr r_info_msg_;
+
+
+	// ROS odometry subscribe
+	message_filters::Subscriber<geometry_msgs::PoseWithCovarianceStamped> pose_sub_;
+
+	rosbag::Bag bag;
+	ros::Publisher pose_pub_;
+
+	bool isComputing = false;
 
 	void dataCb(const sensor_msgs::ImageConstPtr& l_image_msg,
 							const sensor_msgs::ImageConstPtr& r_image_msg,
@@ -131,12 +145,21 @@ protected:
 							const sensor_msgs::CameraInfoConstPtr& r_info_msg
 						)
 	{
+		if(isComputing) // do not overide the pointer when computation is still going on
+			return;
+		
 		all_received_++;
 		l_image_msg_ = l_image_msg;
 		r_image_msg_ = r_image_msg;
 		l_info_msg_ = l_info_msg;
 		r_info_msg_ = r_info_msg;
-		// cout << "Received No." << all_received_ << "ros image" << endl;
+		// std::cout << "Received No." << all_received_ << "ros image" << std::endl;
+	}
+
+	static void increment(int* count)
+	{
+		// std::cout << "Pose Received: " << (*count) << std::endl;
+		(*count)++;
 	}
 };
 
@@ -146,8 +169,12 @@ template<class TVocabulary, class TDetector, class TFeature>
 demoDetector<TVocabulary, TDetector, TFeature>::demoDetector
 	(const std::string &vocfile, int width, int height)
 	: m_vocfile(vocfile),
-		m_width(width), m_height(height), exact_sync_(ExactPolicy(3), left_sub_, right_sub_, left_info_sub_, right_info_sub_), all_received_(0)
-{}
+		m_width(width), 
+		m_height(height), exact_sync_(ExactPolicy(3), left_sub_, right_sub_, left_info_sub_, right_info_sub_), 
+		all_received_(0), pose_received_(0)
+{
+	bag.open("/tmp/loopdetector_pose.bag",rosbag::bagmode::Write);
+}
 
 // ---------------------------------------------------------------------------
 
@@ -224,17 +251,19 @@ void demoDetector<TVocabulary, TDetector, TFeature>::run
 	detector.allocate(1000);
 
 	// prepare visualization windows
-	DUtilsCV::GUI::tWinHandler win = "Current image";
-	// DUtilsCV::GUI::tWinHandler winplot = "Trajectory";
+	// DUtilsCV::GUI::tWinHandler win = "Current image";
+	DUtilsCV::GUI::tWinHandler winplot = "Trajectory";
+
 	
-	// DUtilsCV::Drawing::Plot::Style normal_style(2); // thickness
-	// DUtilsCV::Drawing::Plot::Style loop_style('r', 2); // color, thickness
+	DUtilsCV::Drawing::Plot::Style normal_style('k',2, cv::LINE_AA); // thickness
+	DUtilsCV::Drawing::Plot::Style loop_style('r', 2, cv::LINE_AA); // color, thickness
+	// DUtilsCV::Drawing::Plot::Style detector_style('g', 2); // color, thickness
 	
-	// DUtilsCV::Drawing::Plot implot(240, 320,
-	//   - *std::max_element(xs.begin(), xs.end()),
-	//   - *std::min_element(xs.begin(), xs.end()),
-	//   *std::min_element(ys.begin(), ys.end()),
-	//   *std::max_element(ys.begin(), ys.end()), 20);
+	DUtilsCV::Drawing::Plot implot(480, 640, // x to the right, z to the bottom, top-left origin
+	  -13, // x-min
+	  2, // x-max
+	 - (13), // z-min
+	 - (-2) ); // z-max
 	
 	// prepare profiler to measure times
 	DUtils::Profiler profiler;
@@ -249,15 +278,18 @@ void demoDetector<TVocabulary, TDetector, TFeature>::run
 
 	std::string left_topic, right_topic;
 	std::string left_info_topic, right_info_topic;
+	std::string pose_in_topic;
 	local_nh.param<std::string>("left_image",left_topic, "/stereo/left/image_rect_raw" );
 	local_nh.param<std::string>("right_image",right_topic, "/stereo/right/image_rect_raw" );
 	local_nh.param<std::string>("left_camerainfo",left_info_topic, "/stereo/left/camera_info" );
 	local_nh.param<std::string>("right_camerainfo",right_info_topic, "/stereo/right/camera_info" );
 
+	local_nh.param<std::string>("pose_input",pose_in_topic, "/stereo_odometer/pose" );
+
 	// Subscribe to four input topics.
-	ROS_INFO("viso2_ros: Subscribing to:\n\t* %s\n\t* %s\n\t* %s\n\t* %s", 
+	ROS_INFO("dloopdetector: Subscribing to:\n\t* %s\n\t* %s\n\t* %s\n\t* %s\n\t* %s", 
 				left_topic.c_str(), right_topic.c_str(),
-				left_info_topic.c_str(), right_info_topic.c_str());
+				left_info_topic.c_str(), right_info_topic.c_str(), pose_in_topic.c_str());
 
 	image_transport::ImageTransport it(nh);
 	image_transport::TransportHints hints("raw",ros::TransportHints().tcpNoDelay());
@@ -267,6 +299,17 @@ void demoDetector<TVocabulary, TDetector, TFeature>::run
 	right_info_sub_.subscribe(nh, right_info_topic, 1,  ros::TransportHints().tcpNoDelay());
 
 	exact_sync_.registerCallback(boost::bind(&demoDetector::dataCb, this, _1, _2, _3, _4));
+
+	pose_sub_.subscribe(nh, pose_in_topic,50);
+	pose_sub_.registerCallback(boost::bind(&demoDetector::increment, &pose_received_));
+
+
+	message_filters::Cache<geometry_msgs::PoseWithCovarianceStamped> pose_cache(pose_sub_, 100);
+
+	pose_pub_ = local_nh.advertise<geometry_msgs::PoseWithCovarianceStamped>("pose", 3);
+
+
+	
 	
 	int count = 0;
 	int db_size = 0;
@@ -275,16 +318,29 @@ void demoDetector<TVocabulary, TDetector, TFeature>::run
 	QuadMatcher<TDescriptor, TFeature> qm;
 	StereoMotionEstimator sme;
 
+	std::vector < geometry_msgs::PoseWithCovarianceStamped > m_pose_msg;
+	m_pose_msg.reserve(500);
+
+	// ros::AsyncSpinner spinner(2);
+	// spinner.start();
+
+	DUtilsCV::GUI::showImage(implot.getImage(), true, &winplot, 10); 
+
+	ROS_INFO("Waiting for pose message from VO...");
+	while (ros::ok() && !pose_received_)
+	{
+		ros::spinOnce();
+		ros::Duration(0.5).sleep();
+	}
+	std::cout << "ROS Go!" << std::endl;
 	// go
 	while(true)
 	{
-		
-		
 		// get image from ROS
 		while (ros::ok() && all_received_/10 <= db_size)
 		{
 			ros::spinOnce();
-			ros::Duration(0.01).sleep();
+			ros::Duration(0.05).sleep();
 		}
 
 		if(!ros::ok())
@@ -292,7 +348,10 @@ void demoDetector<TVocabulary, TDetector, TFeature>::run
 			std::cout << "ROS Shutting down" << std::endl;
 			break;
 		}
-		
+
+		isComputing = true;
+		ros::Duration(0.5).sleep();
+		ros::spinOnce();
 		std::cout << "Adding image " << db_size << std::endl;
 
 		// Retrive images from ROS
@@ -302,6 +361,32 @@ void demoDetector<TVocabulary, TDetector, TFeature>::run
 		ROS_ASSERT( m_width == (int)l_image_msg_->width && m_height == (int)l_image_msg_->height);
 		cv::Mat im = cvImage_l->image;
 		cv::Mat im_right = cvImage_r->image;
+
+		uint64_t timestamp = cvImage_l->header.stamp.toNSec();
+		
+
+		// std::cout << "oldest: " << pose_cache.getOldestTime() << "latest: " << pose_cache.getLatestTime() << std::endl;
+		// std::cout << "header: " << l_image_msg_->header.stamp << std::endl;
+
+		auto pose_vec = pose_cache.getInterval(l_image_msg_->header.stamp,l_image_msg_->header.stamp); // std::vector< geometry_msgs::PoseWithCovarianceStampedConstPtr >
+
+		if (pose_vec.size() == 1){
+			
+			m_pose_msg.push_back(*pose_vec[0]);
+		}else
+			std::cerr << "warning: pose_vec.size()=" << pose_vec.size() << std::endl;
+
+		assert(pose_vec.size() <= 1);
+
+		if (pose_vec.empty())
+		{
+			ros::Duration(0.5).sleep(); // give time for VO to process and publish
+			ros::spinOnce();
+			continue;
+		}
+			
+		
+
 
 		if (db_size == 0) // yet to initlaise
 		{
@@ -345,15 +430,15 @@ void demoDetector<TVocabulary, TDetector, TFeature>::run
 		profiler.stop();
 
 		// show image
-		cv::Mat outIm(cv::Size(m_width,m_height),CV_8UC1);
-		cv::drawKeypoints(im,keys,outIm);
-		DUtilsCV::GUI::showImage(outIm, true, &win, 10);
+		// cv::Mat outIm(cv::Size(m_width,m_height),CV_8UC1);
+		// cv::drawKeypoints(im,keys,outIm);
+		// DUtilsCV::GUI::showImage(outIm, true, &win, 10);
 				
 		// add image to the collection and check if there is some loop
 		typename TDetector::DetectionResult result;
 		
 		profiler.profile("detection");
-		detector.detectLoop(keys, descriptors, result, keys_right, descriptors_right); // db_size + 1 for each of the detectLoop operation
+		detector.detectLoop(keys, descriptors, result, keys_right, descriptors_right, timestamp); // db_size + 1 for each of the detectLoop operation
 		db_size++;
 		profiler.stop();
 		
@@ -385,7 +470,10 @@ void demoDetector<TVocabulary, TDetector, TFeature>::run
 				profiler.stop();
 
 				if (viso_result)
+				{
+					result.delta_pose_tr = sme.getCameraMotion();
 					std::cout << "TR Estimate" << std::endl << sme.getCameraMotion().matrix() << std::endl;
+				}	
 				else
 					std::cout << "viso: Error Updating Motion." << std::endl;
 
@@ -439,17 +527,104 @@ void demoDetector<TVocabulary, TDetector, TFeature>::run
 		}
 		std::cout << " Loop detection (mean): " << profiler.getMeanTime("detection") * 1e3 << " ms/image" << std::endl;
 		
-		
+		// obtain VO odometry pose, if detection found
+		if(result.detection()){
+
+			std::cout << "match_stamp=" << result.match_stamp;
+			std::cout << ", query_stamp=" << result.query_stamp << std::endl;
+
+			geometry_msgs::PoseWithCovarianceStamped match_pose_msg,query_pose_msg;
+			size_t idx = 0;
+			bool found = false;
+			for(; idx < m_pose_msg.size() ; idx++)
+			{
+				if (m_pose_msg[idx].header.stamp.toNSec() == result.match_stamp)
+				{
+					match_pose_msg = m_pose_msg[idx];
+					found = true;
+					break;
+				}
+			}
+			assert(found);
+			found = false;
+			for(; idx < m_pose_msg.size() ; idx++)
+			{
+				if (m_pose_msg[idx].header.stamp.toNSec() == result.query_stamp)
+				{
+					query_pose_msg = m_pose_msg[idx];
+					found = true;
+					break;
+				}
+			}
+			assert(found);
+
+
+			match_pose_msg.header.frame_id = "match_vo_frame";
+			query_pose_msg.header.frame_id = "query_vo_frame";
+
+
+			geometry_msgs::Pose detector_pose_msg = tf2::toMsg(sme.getCameraMotion());
+
+			// Eigen::Affine3d match_pose_tr, query_pose_tr;
+			tf2::fromMsg(match_pose_msg.pose.pose,result.match_pose_tr);
+			tf2::fromMsg(query_pose_msg.pose.pose,result.query_pose_tr);
+
+			auto delta_pose_tr =result.match_pose_tr.inverse() * result.query_pose_tr;
+			geometry_msgs::Pose delta_pose = tf2::toMsg(delta_pose_tr);
+
+			geometry_msgs::PoseWithCovarianceStamped pose_msg, delta_pose_msg;
+			pose_msg.header.stamp.fromNSec(result.query_stamp);
+			pose_msg.header.frame_id = "detector_frame";
+			pose_msg.pose.pose = detector_pose_msg;
+
+			delta_pose_msg.header.stamp = query_pose_msg.header.stamp;
+			delta_pose_msg.header.frame_id = "delta_vo_frame";
+			delta_pose_msg.pose.pose = delta_pose;
+
+			bag.write("detector_msg",ros::Time::now(),query_pose_msg);
+			bag.write("detector_msg",ros::Time::now(),match_pose_msg);
+			bag.write("detector_msg",ros::Time::now(),delta_pose_msg);
+			bag.write("detector_msg",ros::Time::now(),pose_msg);
+
+			pose_pub_.publish(query_pose_msg);
+			pose_pub_.publish(match_pose_msg);
+			pose_pub_.publish(delta_pose_msg);
+			pose_pub_.publish(pose_msg);
+		}
 		// // show trajectory
-		// if(i > 0)
-		// {
-		//   if(result.detection())
-		//     implot.line(-xs[i-1], ys[i-1], -xs[i], ys[i], loop_style);
-		//   else
-		//     implot.line(-xs[i-1], ys[i-1], -xs[i], ys[i], normal_style);
-			
-		//   DUtilsCV::GUI::showImage(implot.getImage(), true, &winplot, 10); 
-		// }
+		if(m_pose_msg.size() > 1)
+		{
+			auto i = m_pose_msg.size() - 1;
+			auto x1 = m_pose_msg[i-1].pose.pose.position.x;
+			auto x2 = m_pose_msg[i].pose.pose.position.x;
+			auto z1 = m_pose_msg[i-1].pose.pose.position.z;
+			auto z2 = m_pose_msg[i].pose.pose.position.z;
+
+			std::cout << "x1=" << x1 << ", x2=" << x2 << ", z1=" << z1 << ", z2=" << z2 << std::endl;
+
+			cv::Mat image = implot.getImage();
+
+			if(result.detection())
+			{
+				implot.line(x1, -z1, x2, -z2, loop_style);
+				if (!result.delta_pose_tr.matrix().hasNaN()) // sanity check
+				{
+					auto loop_correct_tr = result.match_pose_tr * result.delta_pose_tr;
+					double x = loop_correct_tr.translation()[0];
+					double z = loop_correct_tr.translation()[2];
+					double PxX = implot.toPxX(x);
+					double PxY = implot.toPxY(-z);
+
+					cv::drawMarker(image,cv::Point(PxX,PxY),cv::Scalar(0,200,0),cv::MARKER_STAR, 10, 1, cv::LINE_AA);
+				}
+			}
+			else
+				implot.line(x1, -z1, x2, -z2, normal_style);
+				
+			DUtilsCV::GUI::showImage(implot.getImage(), true, &winplot, 10); 
+		}
+
+		isComputing = false;
 	}
 	
 	if(count == 0)
@@ -474,6 +649,7 @@ void demoDetector<TVocabulary, TDetector, TFeature>::run
 
 	std::cout << std::endl << "Press a key to finish..." << std::endl;
 	// DUtilsCV::GUI::showImage(implot.getImage(), true, &winplot, 0);
+	
 }
 
 // ---------------------------------------------------------------------------

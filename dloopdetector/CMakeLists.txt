@@ -30,7 +30,10 @@ find_package(catkin REQUIRED COMPONENTS
   image_transport 
   cv_bridge
   image_geometry
-
+  rosbag
+  tf2_ros
+  tf2_eigen
+  
   dbow2
   dlib_ros
   libviso2_eigen
@@ -55,8 +58,8 @@ catkin_package(
 option(BUILD_DemoBRIEF  "Build demo application with BRIEF features" ON)
 
 if(BUILD_DemoBRIEF)
-  add_executable(demo_brief_stereo demo/demo_brief_stereo.cpp)
-  target_include_directories(demo_brief_stereo PRIVATE 
+  add_executable(dloopdetector_stereo demo/demo_brief_stereo.cpp)
+  target_include_directories(dloopdetector_stereo PRIVATE 
     include 
     ${EIGEN3_INCLUDE_DIRS}
     ${DBoW2_INCLUDE_DIRS} 
@@ -64,7 +67,7 @@ if(BUILD_DemoBRIEF)
     ${CATKIN_DEVEL_PREFIX}/../../include # to fix bug that include folder doesnt exist at configure time
   )
 
-  target_link_libraries(demo_brief_stereo PRIVATE 
+  target_link_libraries(dloopdetector_stereo PRIVATE 
     ${OpenCV_LIBS} 
     ${DBoW2_LIBS} 
     ${catkin_LIBRARIES}

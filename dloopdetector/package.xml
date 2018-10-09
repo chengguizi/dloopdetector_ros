@@ -43,6 +43,8 @@
   <build_depend>dbow2</build_depend>
   <build_depend>dlib_ros</build_depend>
   <build_depend>libviso2_eigen</build_depend>
+  <build_depend>rosbag</build_depend>
+  <build_depend>tf2_eigen</build_depend>
   <exec_depend>roscpp</exec_depend>
   <exec_depend>std_msgs</exec_depend>
   <exec_depend>sensor_msgs</exec_depend>
@@ -53,5 +55,7 @@
   <exec_depend>dbow2</exec_depend>
   <exec_depend>dlib_ros</exec_depend>
   <exec_depend>libviso2_eigen</exec_depend>
+  <exec_depend>rosbag</exec_depend>
+  <exec_depend>tf2_eigen</exec_depend>
 
 </package>

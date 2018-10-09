@@ -26,6 +26,8 @@
 
 #include "DVision/DVision.h"
 
+#include <Eigen/Eigen>
+
 namespace DLoopDetector {
 
 
@@ -75,6 +77,7 @@ public:
   struct StereoVector{
     std::vector< Tstereo > main;
     std::vector< Tstereo > right;
+    uint64_t stamp;
 
     std::size_t size(){
       auto size = main.size();
@@ -100,6 +103,8 @@ public:
     /// Matched id if loop detected, otherwise, best candidate 
     DBoW2::EntryId match;
 
+    uint64_t query_stamp, match_stamp;
+
     /// KeyPoints of images
     StereoVector<cv::KeyPoint>  query_keys;
     StereoVector<cv::KeyPoint>  match_keys;
@@ -107,6 +112,8 @@ public:
     /// Descriptors of images
     StereoVector<TDescriptor> query_descriptors;
     StereoVector<TDescriptor> match_descriptors;
+
+    Eigen::Affine3d delta_pose_tr, match_pose_tr, query_pose_tr;
 
     /**
      * Checks if the loop was detected
@@ -284,7 +291,7 @@ public:
    * @return true iff there was match
    */
   bool detectLoop(const std::vector<cv::KeyPoint> &keys, const std::vector<TDescriptor> &descriptors, DetectionResult &match,
-                  const std::vector<cv::KeyPoint> &keys_right, const std::vector<TDescriptor> &descriptors_right );
+                  const std::vector<cv::KeyPoint> &keys_right, const std::vector<TDescriptor> &descriptors_right, uint64_t timestamp );
 
   /**
    * Resets the detector and clears the database, such that the next entry
@@ -719,7 +726,7 @@ TemplatedLoopDetector<TDescriptor, F>::getVocabulary() const
 template<class TDescriptor, class F>
 bool TemplatedLoopDetector<TDescriptor, F>::detectLoop
                   (const std::vector<cv::KeyPoint> &keys, const std::vector<TDescriptor> &descriptors, DetectionResult &match,
-                  const std::vector<cv::KeyPoint> &keys_right, const std::vector<TDescriptor> &descriptors_right )
+                  const std::vector<cv::KeyPoint> &keys_right, const std::vector<TDescriptor> &descriptors_right, uint64_t timestamp )
 {
   DBoW2::EntryId entry_id = m_database->size();
   match.query = entry_id;
@@ -832,10 +839,13 @@ bool TemplatedLoopDetector<TDescriptor, F>::detectLoop
                 match.status = LOOP_DETECTED;
 
                 // update keys and descriptors in the result
-                match.query_keys = {keys, keys_right};
+                match.query_keys = {keys, keys_right, timestamp};
                 match.match_keys = m_image_keys[match.match];
 
-                match.query_descriptors = {descriptors, descriptors_right};
+                match.query_stamp = timestamp;
+                match.match_stamp = m_image_keys[match.match].stamp;
+
+                match.query_descriptors = {descriptors, descriptors_right, timestamp};
                 match.match_descriptors = m_image_descriptors[match.match];
 
                 assert( match.query_keys.main.size() == match.query_descriptors.main.size() );
@@ -882,15 +892,17 @@ bool TemplatedLoopDetector<TDescriptor, F>::detectLoop
   // m_image_keys and m_image_descriptors have the same length
   if(m_image_keys.size() == entry_id)
   {
-    m_image_keys.push_back( StereoVector<cv::KeyPoint>{keys,keys_right} );
-    m_image_descriptors.push_back(StereoVector<TDescriptor>{descriptors, descriptors_right});
+    m_image_keys.push_back( StereoVector<cv::KeyPoint>{keys,keys_right, timestamp} );
+    m_image_descriptors.push_back(StereoVector<TDescriptor>{descriptors, descriptors_right, timestamp});
   }
   else
   {
     m_image_keys[entry_id].main = keys;
     m_image_keys[entry_id].right = keys_right;
+    m_image_keys[entry_id].stamp = timestamp;
     m_image_descriptors[entry_id].main = descriptors;
     m_image_descriptors[entry_id].right = descriptors_right;
+    m_image_descriptors[entry_id].stamp = timestamp;
   }
   
   // store this bowvec if we are going to use it in next iteratons

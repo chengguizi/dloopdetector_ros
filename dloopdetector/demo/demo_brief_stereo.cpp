@@ -63,7 +63,7 @@ private:
 
 int main(int argc, char **argv)
 {
-  ros::init(argc, argv, "demo_brief");
+  ros::init(argc, argv, "dloopdetector_stereo");
 
 	ros::NodeHandle local_nh("~");
 

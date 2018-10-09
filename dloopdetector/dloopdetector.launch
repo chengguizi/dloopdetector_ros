@@ -1,16 +1,19 @@
 <launch>
-    <node pkg="dloopdetector" type="demo_brief_stereo" name="demo_brief_stereo" output="screen">
+    <node pkg="dloopdetector" type="dloopdetector_stereo" name="dloopdetector_stereo" output="screen">
         <param name="left_image" type="str" value="/stereo/left/image_rect_raw" />
 		<param name="right_image" type="str" value="/stereo/right/image_rect_raw" />
 
         <param name="left_camerainfo" type="str" value="/stereo/left/camera_info" />
 		<param name="right_camerainfo" type="str" value="/stereo/right/camera_info" />
 
-        <param name="IMAGE_W" type="int" value="1280" />
-        <param name="IMAGE_H" type="int" value="720" />
+        <param name="IMAGE_W" type="int" value="752" />
+        <param name="IMAGE_H" type="int" value="480" />
 
         <param name="VOC_FILE" type="str" value="/home/dhl/git/catkin_ws/resources/brief_k10L6.voc.gz" />
         <param name="BRIEF_PATTERN_FILE" type="str" value="/home/dhl/git/catkin_ws/resources/brief_pattern.yml" />
+
+        <param name="pose_input" type="str" value="/stereo_odometer/pose" />
+        
         
     </node>
 </launch>
