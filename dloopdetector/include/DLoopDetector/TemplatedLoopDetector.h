@@ -28,6 +28,8 @@
 
 #include <Eigen/Eigen>
 
+#define UNUSED(x) (void)(x)
+
 namespace DLoopDetector {
 
 
@@ -1224,6 +1226,7 @@ bool TemplatedLoopDetector<TDescriptor, F>::isGeometricallyConsistent_Flann
   const std::vector<TDescriptor> &descriptors,
   cv::FlannBasedMatcher &flann_structure) const
 {
+  UNUSED(descriptors);
   std::vector<unsigned int> i_old, i_cur; // indices of correspondences
   
   const std::vector<cv::KeyPoint>& old_keys = m_image_keys[old_entry].main;

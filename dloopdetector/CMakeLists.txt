@@ -11,18 +11,14 @@ if(NOT CMAKE_BUILD_TYPE AND NOT CMAKE_CONFIGURATION_TYPES)
     "MinSizeRel" "RelWithDebInfo")
 endif()
 
-# set(CMAKE_CXX_FLAGS "-Wall -Wextra")
+set(CMAKE_CXX_FLAGS "-Wall -Wextra")
 # set(CMAKE_CXX_FLAGS_DEBUG "-g")
 set(CMAKE_CXX_FLAGS_RELEASE "-O3")
 
 # may not need this
 # set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -march=native")
 
-# message("CMAKE_BUILD_TYPE is ${CMAKE_BUILD_TYPE}")
-# message("CMAKE_CXX_FLAGS is ${CMAKE_CXX_FLAGS}")
-
 ### configuration for catkin packages
-
 find_package(catkin REQUIRED COMPONENTS 
   roscpp 
   sensor_msgs 
@@ -39,8 +35,6 @@ find_package(catkin REQUIRED COMPONENTS
   libviso2_eigen
 )
 
-# set(DEPENDENCY_DIR ${CMAKE_BINARY_DIR}/dependencies)
-# set(DEPENDENCY_INSTALL_DIR ${DEPENDENCY_DIR}/install)
 find_package(DBoW2 REQUIRED)
 find_package(OpenCV REQUIRED)
 find_package(Eigen3 REQUIRED)
@@ -49,7 +43,7 @@ catkin_package(
 	# INCLUDE_DIRS
 	# LIBRARIES
 	# CATKIN_DEPENDS
-	# DEPENDS DBoW2 OpenCV EIGEN3 #  DLib this is just for checking purposes
+	# DEPENDS DBoW2 OpenCV EIGEN3 # this is just for checking purposes
     )
     
 
