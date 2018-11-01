@@ -76,6 +76,16 @@ class demoDetector
 {
 public:
 	typedef typename TFeature::TDescriptor TDescriptor;
+
+
+	ros::Subscriber _reset_sub;
+	ros::Publisher _trajectory_pub;
+
+	void resetCallback(const std_msgs::HeaderPtr &header){
+    	ROS_WARN_STREAM("Reset occurs at " << header->stamp );
+		resetPlot();
+  	}
+
 	/**
 	 * @param vocfile vocabulary file to load
 	 * @param imagedir directory to read images from
@@ -161,6 +171,26 @@ protected:
 		// std::cout << "Pose Received: " << (*count) << std::endl;
 		(*count)++;
 	}
+
+private:
+	bool visualisation_on;
+	DUtilsCV::Drawing::Plot implot;
+	void resetPlot(){
+		implot.create(480, 640, // x to the right, z to the bottom, top-left origin
+		-13, // x-min
+		2, // x-max
+		- (13), // z-min
+		- (-2) ); // z-max
+	}
+
+	void publishTrajectory(const cv::Mat &image, const std_msgs::Header &header){
+
+		cv_bridge::CvImage cv_image = cv_bridge::CvImage(header, \
+                sensor_msgs::image_encodings::BGR8, image);
+
+		_trajectory_pub.publish(cv_image.toImageMsg());
+	}
+	
 };
 
 // ---------------------------------------------------------------------------
@@ -173,7 +203,18 @@ demoDetector<TVocabulary, TDetector, TFeature>::demoDetector
 		m_height(height), exact_sync_(ExactPolicy(3), left_sub_, right_sub_, left_info_sub_, right_info_sub_), 
 		all_received_(0), pose_received_(0)
 {
-	bag.open("/tmp/loopdetector_pose.bag",rosbag::bagmode::Write);
+	// Resolve topic names
+	ros::NodeHandle nh;
+	ros::NodeHandle local_nh("~");
+  	// Subscribe to reset topic
+    _reset_sub = nh.subscribe("/reset", 1, &demoDetector::resetCallback, this);
+
+	_trajectory_pub = local_nh.advertise<sensor_msgs::Image>("trajectory",3);
+
+	// load params
+	ROS_ASSERT(local_nh.getParam("visualisation", visualisation_on));
+
+	bag.open("/tmp/loopdetector_pose.bag", rosbag::bagmode::Write);
 }
 
 // ---------------------------------------------------------------------------
@@ -258,12 +299,8 @@ void demoDetector<TVocabulary, TDetector, TFeature>::run
 	DUtilsCV::Drawing::Plot::Style normal_style('k',2, cv::LINE_AA); // thickness
 	DUtilsCV::Drawing::Plot::Style loop_style('r', 2, cv::LINE_AA); // color, thickness
 	// DUtilsCV::Drawing::Plot::Style detector_style('g', 2); // color, thickness
-	
-	DUtilsCV::Drawing::Plot implot(480, 640, // x to the right, z to the bottom, top-left origin
-	  -13, // x-min
-	  2, // x-max
-	 - (13), // z-min
-	 - (-2) ); // z-max
+
+	resetPlot();
 	
 	// prepare profiler to measure times
 	DUtils::Profiler profiler;
@@ -323,8 +360,8 @@ void demoDetector<TVocabulary, TDetector, TFeature>::run
 
 	// ros::AsyncSpinner spinner(2);
 	// spinner.start();
-
-	DUtilsCV::GUI::showImage(implot.getImage(), true, &winplot, 10); 
+	if (visualisation_on)
+		DUtilsCV::GUI::showImage(implot.getImage(), true, &winplot, 10); 
 
 	ROS_INFO("Waiting for pose message from VO...");
 	while (ros::ok() && !pose_received_)
@@ -620,8 +657,14 @@ void demoDetector<TVocabulary, TDetector, TFeature>::run
 			}
 			else
 				implot.line(x1, -z1, x2, -z2, normal_style);
-				
-			DUtilsCV::GUI::showImage(implot.getImage(), true, &winplot, 10); 
+			
+			if (visualisation_on)
+				DUtilsCV::GUI::showImage(implot.getImage(), true, &winplot, 10); 
+
+			std_msgs::Header header;
+			header.stamp.fromNSec(result.query_stamp);
+			header.frame_id = "dloopdetector";
+			publishTrajectory(implot.getImage(),header);
 		}
 
 		isComputing = false;

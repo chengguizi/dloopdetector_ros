@@ -38,6 +38,8 @@ public:
   // Proper initialisation of BRIEF descriptor
   BriefExtractor() : m_brief(BRIEF_BIT_LENGTH) {}
 
+  
+
   /** 
    * Extracts features from an image
    * @param im image
@@ -96,6 +98,7 @@ int main(int argc, char **argv)
 
 BriefExtractor::BriefExtractor(const std::string &pattern_file)
 {
+
   // The DVision::BRIEF extractor computes a random pattern by default when
   // the object is created.
   // We load the pattern that we used to build the vocabulary, to make

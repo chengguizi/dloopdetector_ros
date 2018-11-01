@@ -6,13 +6,15 @@
         <param name="left_camerainfo" type="str" value="/stereo/left/camera_info" />
 		<param name="right_camerainfo" type="str" value="/stereo/right/camera_info" />
 
-        <param name="IMAGE_W" type="int" value="752" />
+        <param name="IMAGE_W" type="int" value="848" />
         <param name="IMAGE_H" type="int" value="480" />
 
-        <param name="VOC_FILE" type="str" value="/home/dhl/git/catkin_ws/resources/brief_k10L6.voc.gz" />
-        <param name="BRIEF_PATTERN_FILE" type="str" value="/home/dhl/git/catkin_ws/resources/brief_pattern.yml" />
+        <param name="VOC_FILE" type="str" value="/home/upsquared/git/catkin_ws/resources/brief_k10L6.voc.gz" />
+        <param name="BRIEF_PATTERN_FILE" type="str" value="/home/upsquared/git/catkin_ws/resources/brief_pattern.yml" />
 
         <param name="pose_input" type="str" value="/stereo_odometer/pose" />
+
+        <param name="visualisation" type="bool" value="false" />
         
         
     </node>
